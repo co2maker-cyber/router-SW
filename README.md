@@ -4,7 +4,7 @@ Packet Tracer처럼 네트워크 장비·포트·IP·케이블을 기록하는 �
 
 ## 실행
 
-`portbook.html`을 내려받아 브라우저로 열면 됩니다. 데이터는 그 브라우저의 localStorage(`portbook.local`)에 저장됩니다.
+`portbook.html`을 내려받아 브라우저로 열면 됩니다. 데이터는 그 브라우저의 localStorage(`portbook.local`)에 저장됩니다. claude.ai Artifact로 열면 만든 사람은 자기 대장을, 링크로 들어온 사람은 각자 자기만의 대장을 따로 씁니다.
 
 ## 주요 기능
 

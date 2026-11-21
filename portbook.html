@@ -934,34 +934,45 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
       newId() { return Math.random().toString(36).slice(2, 12); }
     };
   };
-  const dbStore = db => ({
-    mode: "db",
-    watch(c, fn, onErr) {
-      db.collection(c).onSnapshot(snap => fn(snap.docs.map(d => ({ id: d.id, ...d.data() })), snap.metadata), onErr);
-    },
-    save: (c, id, body) => db.collection(c).doc(id).set(body),
-    remove: (c, id) => db.collection(c).doc(id).delete(),
-    newId: () => db.collection("devices").doc().id
-  });
+  // base: null = the owner's ledger (top-level collections), else a viewer's private document data/users/<id>/pb
+  const dbStore = (db, base) => {
+    const col = c => base ? base.collection(c) : db.collection(c);
+    return {
+      mode: base ? "mine" : "db",
+      watch(c, fn, onErr) {
+        col(c).onSnapshot(snap => fn(snap.docs.map(d => ({ id: d.id, ...d.data() })), snap.metadata), onErr);
+      },
+      save: (c, id, body) => col(c).doc(id).set(body),
+      remove: (c, id) => col(c).doc(id).delete(),
+      newId: () => col("devices").doc().id
+    };
+  };
 
   function setStatus(kind, text) {
     const el = $("#statusLine"); el.className = "status-line " + kind; $("#statusText").textContent = text;
   }
 
   async function boot() {
-    let db = null;
-    try { db = window.claude?.use ? await window.claude.use("db") : null; } catch (e) { db = null; }
+    // Each person keeps their own ledger: the owner uses the top-level collections (hidden from everyone else by the
+    // db rules), a signed-in viewer who may write uses their private data/users/<id>/pb, anyone else this browser.
+    let db = null, user = null, base = null;
+    try { [db, user] = window.claude?.use ? await Promise.all([window.claude.use("db"), window.claude.use("user")]) : [null, null]; } catch (e) { db = null; }
     if (db) {
-      store = dbStore(db);
+      let owner = false, uid = null, canWrite = null;
+      try { [owner, uid, canWrite] = user ? await Promise.all([user.isOwner(), user.id(), user.can("data.write")]) : [false, null, null]; } catch (e) {}
+      if (!owner) { if (uid && canWrite === true) base = db.doc("data/users/" + uid + "/pb"); else db = null; }
+    }
+    if (db) {
+      store = dbStore(db, base);
       const timer = setTimeout(() => setStatus("warn", "저장소 응답이 늦습니다. 표시된 내용이 최신이 아닐 수 있습니다."), 10000);
-      const done = () => { if (state.loaded.devices && state.loaded.interfaces) { clearTimeout(timer); setStatus("ok", "공유 저장소에 자동 저장됩니다. 이 페이지를 여는 사람은 같은 대장을 봅니다."); } };
+      const done = () => { if (state.loaded.devices && state.loaded.interfaces) { clearTimeout(timer); setStatus("ok", base ? "내 저장소에 자동 저장됩니다. 다른 사람은 이 대장을 볼 수 없고, 각자 자기 대장을 따로 씁니다." : "자동 저장됩니다 (만든 사람 전용). 링크로 들어온 사람은 각자 자기 대장을 따로 씁니다."); } };
       const onErr = e => { clearTimeout(timer); setStatus("warn", "저장소 연결이 끊겼습니다 (" + e.code + "). 페이지를 다시 열어 주세요."); };
       store.watch("devices", (rows, meta) => { state.devices = rows; if (!meta.fromCache) state.loaded.devices = true; done(); render(); }, onErr);
       store.watch("interfaces", (rows, meta) => { state.ifaces = rows; if (!meta.fromCache) state.loaded.interfaces = true; done(); render(); }, onErr);
       store.watch("racks", rows => { state.racks = rows; render(); }, onErr);
     } else {
       store = localStore();
-      setStatus("warn", "공유 저장소를 쓸 수 없어 이 브라우저에만 저장합니다. 로그인하면 공유 저장소를 씁니다.");
+      setStatus("warn", "이 브라우저에만 저장됩니다. 다른 기기나 다른 사람과는 공유되지 않습니다. 파일 → 내보내기로 백업할 수 있습니다.");
       store.watch("devices", rows => { state.devices = rows; state.loaded.devices = true; render(); });
       store.watch("interfaces", rows => { state.ifaces = rows; state.loaded.interfaces = true; render(); });
       store.watch("racks", rows => { state.racks = rows; render(); });
