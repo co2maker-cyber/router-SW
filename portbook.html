@@ -3428,11 +3428,11 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
   // each device keeps its own console (screen, mode, current interface) while you switch between them
   function cliSwitch(id) {
     if (cli.dev === id) return;
-    if (cli.dev) cli.sessions[cli.dev] = { mode: cli.mode, ifId: cli.ifId, xHead: cli.xHead, html: $("#cliOut").innerHTML };
+    if (cli.dev) cli.sessions[cli.dev] = { mode: cli.mode, ifId: cli.ifId, xHead: cli.xHead, ask: cli.ask, html: $("#cliOut").innerHTML };
     cli.ask = null; cli.dev = id; const s = cli.sessions[id], d = state.devices.find(x => x.id === id);
-    if (s) { cli.mode = s.mode; cli.ifId = s.ifId; cli.xHead = s.xHead; $("#cliOut").innerHTML = s.html; }
-    else { cli.mode = "user"; cli.ifId = null; cli.xHead = null; if (d) (CLI_OK_KINDS.includes(d.kind) ? cliBoot : hostBoot)(d); }
-    $("#cliPrompt").textContent = cliPrompt();
+    if (s) { cli.mode = s.mode; cli.ifId = s.ifId; cli.xHead = s.xHead; cli.ask = s.ask || null; $("#cliOut").innerHTML = s.html; }
+    else { cli.mode = "user"; cli.ifId = null; cli.xHead = null; if (d) { if (CLI_OK_KINDS.includes(d.kind)) { cliBoot(d); cliLock(d); } else hostBoot(d); } }
+    cliSync();
   }
   function renderCliView() {
     const devs = sortedDevices().filter(cliCapable);
@@ -3444,11 +3444,12 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
     const d = cliDev();
     $("#cliName").textContent = d ? d.name : "장비를 고르세요"; $("#cliModel").textContent = d ? (d.model ? (ROUTERS[d.model]?.label || "Cisco " + d.model) : KIND[d.kind]) : "";
     $("#cliTerm").hidden = !d; $("#cliPaste").disabled = !d; $("#cliCopy").disabled = !d || !CLI_OK_KINDS.includes(d.kind);
-    $("#cliPrompt").textContent = cliPrompt();
+    cliSync();
   }
   const CLI_OK_KINDS = ["router", "switch", "l3switch", "firewall"];
   const cliDev = () => state.devices.find(x => x.id === cli.dev);
   const cliIf = () => state.ifaces.find(x => x.id === cli.ifId);
+  function cliSync() { $("#cliPrompt").textContent = cliPrompt(); const inp = $("#cliIn"), pw = !!cli.ask?.secret; if ((inp.type === "password") !== pw) { inp.type = pw ? "password" : "text"; inp.value = ""; } }
   function cliPrompt() {
     const d = cliDev(); if (!d) return ">";
     if (cli.ask) return cli.ask.text;
@@ -3505,8 +3506,16 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
       if (i.status === "admin-down") L.push(" shutdown");
       L.push("!");
     }
-    for (const x of d.cliExtra || []) L.push(x);
-    if ((d.cliExtra || []).length) L.push("!");
+    const blocks = []; for (const x of d.cliExtra || []) { if (!/^\s/.test(x) || !blocks.length) blocks.push([]); blocks[blocks.length - 1].push(x); }
+    const pre = blocks.filter(b => /^(service|enable|username|ip domain|no ip domain)/i.test(b[0])), tail = blocks.filter(b => /^(banner|line)\s/i.test(b[0])), mid = blocks.filter(b => !pre.includes(b) && !tail.includes(b));
+    if (pre.length) { const at = L.indexOf("!", 4) + 1; L.splice(at, 0, ...pre.flat(), "!"); }
+    for (const b of mid) L.push(...b);
+    if (mid.length) L.push("!");
+    for (const b of tail.filter(b => /^banner/i.test(b[0]))) L.push(...b);
+    const lines = tail.filter(b => /^line/i.test(b[0])), has = h => lines.some(b => b[0].toLowerCase() === h);
+    for (const [h, def] of [["line con 0", []], ["line aux 0", []], ["line vty 0 4", [" login"]]]) if (!has(h)) lines.push([h, ...def]);
+    const ord = b => ({ con: 0, aux: 1, vty: 2 })[b[0].split(/\s+/)[1]] ?? 3;
+    for (const b of lines.sort((a, b) => ord(a) - ord(b) || a[0].localeCompare(b[0]))) L.push(...b, "!");
     L.push("end");
     return L;
   }
@@ -3525,9 +3534,9 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
     priv: ["configure terminal   설정 모드로", "copy running-config startup-config (copy ru st) / write memory (wr)", "copy startup-config running-config", "erase startup-config / write erase", "reload               다시 켜기",
       "show running-config / startup-config", "show ip interface brief / ip route", "show interfaces <이름> / controllers <시리얼>", "show vlan brief / cdp neighbors / clock / history / version",
       "ping <IP> / traceroute <IP>", "clock set 14:30:00 21 Nov 2026", "terminal length 0 / debug … / undebug all", "disable / exit / logout"],
-    config: ["hostname <이름>", "interface <이름>     예: interface g0/0, int s0/0/0, int lo0, int g0/0.10", "ip route / router ospf … (기록만 하고 show run에 남김)", "no <명령>", "do <특권 명령>       예: do show ip int brief", "exit / end"],
+    config: ["hostname <이름>", "enable secret <비밀번호> / enable password <비밀번호>", "line console 0 → password … / login", "line vty 0 4 → password … / login", "username <이름> secret <비밀번호>", "service password-encryption", "interface <이름>     예: interface g0/0, int s0/0/0, int lo0, int g0/0.10", "ip route / router ospf … (기록만 하고 show run에 남김)", "no <명령>", "do <특권 명령>       예: do show ip int brief", "exit / end"],
     "config-if": ["ip address <IP> <마스크>", "no ip address", "shutdown / no shutdown", "description <메모>", "switchport mode access|trunk", "switchport access vlan <번호>", "switchport trunk allowed vlan <목록>", "encapsulation ppp|hdlc|dot1Q <VLAN>", "clock rate <값>  (DCE 시리얼)", "bandwidth <kbps> / speed <값>", "exit / end"],
-    "config-x": ["network … / router-id … 등 라우팅 명령 (기록만 함)", "exit / end"]
+    "config-x": ["(router) network … / router-id … / version 2", "(line) password <비밀번호> / login / login local", "(line) exec-timeout <분> <초> / logging synchronous", "exit / end"]
   };
   async function cliSaveIf(i, patch) {
     const body = { ...strip(i), ...patch, updatedAt: new Date().toISOString() };
@@ -3549,10 +3558,55 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
     if (peer && peer.status === "down" && up) await cliSaveIf(peer, { status: "up" });
     return { up, linked };
   }
+  // ---- passwords: enable secret/password, line login, username — kept as IOS shows them in show run
+  const T7X = "dsfd;kfoA,.iyewrkldJKDHSUBsgvca69834ncxv9873254k;fg87";
+  const t7enc = (pw, seed) => { seed ??= [...pw].reduce((a, c) => a + c.charCodeAt(0), 0) % 16; let o = String(seed).padStart(2, "0"); for (let i = 0; i < pw.length; i++) o += (pw.charCodeAt(i) ^ T7X.charCodeAt((seed + i) % 53)).toString(16).toUpperCase().padStart(2, "0"); return o; };
+  const t7dec = h => { if (!/^\d\d([0-9A-Fa-f]{2})+$/.test(h) || +h.slice(0, 2) > 15) return null; const seed = +h.slice(0, 2); let o = ""; for (let i = 2, k = 0; i < h.length; i += 2, k++) o += String.fromCharCode(parseInt(h.slice(i, i + 2), 16) ^ T7X.charCodeAt((seed + k) % 53)); return o; };
+  // type-5 look-alike (shape of an MD5-crypt string; not the real algorithm)
+  const t5enc = pw => { const A = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"; let h = [0x811c9dc5, 5381, 0x9e3779b9, 0x2545f491], out = "";
+    for (const c of "portbook:" + pw) { const x = c.charCodeAt(0); h = [Math.imul(h[0] ^ x, 16777619) >>> 0, (Math.imul(h[1], 33) + x) >>> 0, Math.imul(h[2] ^ x, 0x85ebca6b) >>> 0, (h[3] + Math.imul(x, 0xc2b2ae35)) >>> 0]; }
+    for (let k = 0; k < 26; k++) { const j = k % 4; out += A[h[j] % 64]; h[j] = (Math.floor(h[j] / 64) ^ Math.imul(h[(j + 1) % 4], 2654435761)) >>> 0; }
+    return `$1$${out.slice(0, 4)}$${out.slice(4)}`; };
+  // "cisco" | "0 cisco" | "7 0822455D0A16" | "5 $1$..."  ->  { type, val }
+  const pwParse = v => { const m = String(v || "").trim().match(/^(?:([057])\s+)?(\S.*)$/); return m ? { type: m[1] || "0", val: m[2] } : null; };
+  const pwForm = (head, v, enc) => { const p = pwParse(v); if (!p || p.type === "5") return null; if (p.type === "7") return t7dec(p.val) == null ? null : `${head} 7 ${p.val.toUpperCase()}`; return enc ? `${head} 7 ${t7enc(p.val)}` : `${head} ${p.val}`; };
+  const secretForm = (head, v) => { const p = pwParse(v); if (!p || p.type === "7") return null; return `${head} 5 ${p.type === "5" ? p.val : t5enc(p.val)}`; };
+  function pwOk(stored, input) {
+    const p = pwParse(stored); if (!p) return false;
+    return p.type === "5" ? t5enc(input) === p.val : p.type === "7" ? t7dec(p.val) === input : p.val === input;
+  }
+  const topKey = x => { const m = x.trim().match(/^(enable secret|enable password|username \S+|banner motd|ip domain-name|ip default-gateway)\b/i); return m ? m[1].toLowerCase() : null; };
+  const subKey = x => { const m = x.trim().match(/^(password|login|exec-timeout|logging synchronous|transport input|version|router-id|name)\b/i); return m ? m[1].toLowerCase() : null; };
+  const lineHead = x => { const t = x.trim().split(/\s+/), ty = (t[1] || "").toLowerCase(); return ["line", /^c/.test(ty) ? "con" : /^v/.test(ty) ? "vty" : /^a/.test(ty) ? "aux" : ty, ...t.slice(2)].join(" "); };
+  const enablePw = d => { const ex = d.cliExtra || []; const s5 = ex.find(x => /^enable secret\s/i.test(x)), pw = ex.find(x => /^enable password\s/i.test(x)); return s5 ? s5.replace(/^enable secret\s+/i, "") : pw ? pw.replace(/^enable password\s+/i, "") : null; };
+  function consoleAuth(d) {
+    const ch = extraBlock(d, "line con 0"), lg = ch.find(x => /^login\b/i.test(x)), pw = ch.find(x => /^password\s/i.test(x));
+    return { login: lg ? (/local/i.test(lg) ? "local" : "line") : null, pw: pw ? pw.replace(/^password\s+/i, "") : null };
+  }
+  const needLogin = d => !!d && CLI_OK_KINDS.includes(d.kind) && !!consoleAuth(d).login;
+  // "Press RETURN to get started!": the next Enter starts a console login when line con 0 asks for one
+  function cliLock(d) { cli.ask = { text: "", lock: true, fn: async () => cliLogin(d) }; }
+  function cliLogin(d) {
+    const c = consoleAuth(d); if (!c.login) return;
+    const again = msg => { cliOut(msg); cliOut(""); cliOut(`${d.name.replace(/\s+/g, "")} con0 is now available`); cliOut(""); cliOut("Press RETURN to get started!"); cliOut(""); cliLock(d); };
+    if (c.login === "line" && !c.pw) return again("% Password required, but none set");
+    cliOut(""); cliOut("User Access Verification"); cliOut("");
+    let tries = 0;
+    if (c.login === "line") {
+      const ask = () => cliAsk("Password: ", async v => { if (pwOk(c.pw, v)) { cli.mode = "user"; return; } if (++tries < 3) ask(); else again("% Bad passwords"); }, true);
+      return ask();
+    }
+    const users = (d.cliExtra || []).map(x => x.match(/^username\s+(\S+)\s+(?:privilege\s+\d+\s+)?(?:secret|password)\s+(.+)$/i)).filter(Boolean);
+    const askUser = () => cliAsk("Username: ", async u => cliAsk("Password: ", async v => {
+      const hit = users.find(m => m[1] === u); if (hit && pwOk(hit[2], v)) { cli.mode = "user"; return; }
+      cliOut(""); cliOut("% Login invalid"); cliOut(""); if (++tries < 3) askUser(); else again("");
+    }, true));
+    askUser();
+  }
   // ---- privileged commands that save, erase, reload and look around (Packet Tracer wording)
   const cfgBody = d => cliShowRun(d).slice(2);   // drop "Building configuration..." and the blank line
   const cfgDirty = d => !d.startupCfg || d.startupCfg.join("\n") !== cfgBody(d).join("\n");
-  const cliAsk = (text, fn) => { cli.ask = { text, fn }; };
+  const cliAsk = (text, fn, secret = false) => { cli.ask = { text, fn, secret }; };
   const yes = v => /^(y|ye|yes)$/i.test(v), no = v => /^(n|no)$/i.test(v);
   async function cliSaveStartup(d) {
     cliOut("Building configuration...");
@@ -3570,11 +3624,12 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
     ["", "Press RETURN to get started!", ""].forEach(x => cliOut(x));
     cli.mode = "user"; cli.ifId = null; cli.xHead = null;
     for (const i of ifacesOf(d.id).filter(i => i.status === "up")) cliOut(`%LINK-5-CHANGED: Interface ${i.name}, changed state to up`, "cli-log");
+    cliLock(d);
   }
   async function cliExecMore(d, tok, bad) {
     const w = tok.map(x => x.toLowerCase()), [A, B, C] = w, priv = cli.mode === "priv";
     const need = () => { bad("% 특권 모드 명령입니다. enable 을 먼저 입력하세요."); return true; };
-    if (kw(A, "logout", 4)) { cli.mode = "user"; cliOut(""); cliOut(`${d.name.replace(/\s+/g, "")} con0 is now available`); cliOut(""); cliOut("Press RETURN to get started!"); return true; }
+    if (kw(A, "logout", 4)) { cli.mode = "user"; cliOut(""); cliOut(`${d.name.replace(/\s+/g, "")} con0 is now available`); cliOut(""); cliOut("Press RETURN to get started!"); cliLock(d); return true; }
     if (kw(A, "terminal", 3)) return true;   // terminal length 0, terminal monitor ...
     if (kw(A, "traceroute", 4)) {
       if (!tok[1] || !ipRe.test(tok[1])) { bad("% Unrecognized host or address, or protocol not running."); return true; }
@@ -3649,6 +3704,7 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
       const z = n => String(n).padStart(2, "0");
       cliOut(`*${z(t.getUTCHours())}:${z(t.getUTCMinutes())}:${z(t.getUTCSeconds())}.${String(t.getUTCMilliseconds()).padStart(3, "0")} UTC ${dn[t.getUTCDay()]} ${mn[t.getUTCMonth()]} ${t.getUTCDate()} ${t.getUTCFullYear()}`); return true;
     }
+    if (kw(B, "privilege", 4)) { cliOut(`Current privilege level is ${cli.mode === "user" ? 1 : 15}`); return true; }
     if (kw(B, "history", 2)) { cli.hist.slice(-10).forEach(x => cliOut("  " + x)); return true; }
     if (kw(B, "controllers", 3)) {
       const s = cliIfName(tok.slice(2).join("")); const i = s && ifacesOf(d.id).find(x => x.name.toLowerCase() === (s.type + s.num).toLowerCase());
@@ -3764,12 +3820,16 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
     if (kw(A, "exit", 2)) {
       if (cli.mode === "config-if" || cli.mode === "config-x") { cli.mode = "config"; cli.ifId = null; }
       else if (cli.mode === "config") cli.mode = "priv";
-      else { cli.mode = "user"; cliOut(""); cliOut(`${d.name.replace(/\s+/g, "")} con0 is now available`); cliOut(""); cliOut("Press RETURN to get started!"); cliOut(""); }
+      else { cli.mode = "user"; cliOut(""); cliOut(`${d.name.replace(/\s+/g, "")} con0 is now available`); cliOut(""); cliOut("Press RETURN to get started!"); cliOut(""); cliLock(d); }
       return;
     }
     if (kw(A, "do") && cli.mode.startsWith("config")) { const m = cli.mode; cli.mode = "priv"; await cliExec(tok.slice(1).join(" ")); if (cli.mode === "priv") cli.mode = m; return; }
     if (cli.mode === "user" || cli.mode === "priv") {
-      if (kw(A, "enable", 2)) { cli.mode = "priv"; return; }
+      if (kw(A, "enable", 2)) {
+        const ep = enablePw(d); if (!ep || cli.mode === "priv") { cli.mode = "priv"; return; }
+        let tries = 0; const ask = () => cliAsk("Password: ", async v => { if (pwOk(ep, v)) cli.mode = "priv"; else if (++tries < 3) ask(); else cliOut("% Bad secrets"); }, true);
+        ask(); return;
+      }
       if (kw(A, "disable", 4) && cli.mode === "priv") { cli.mode = "user"; return; }
       if (kw(A, "show", 2)) {
         const B = (b || "").toLowerCase();
@@ -3822,16 +3882,34 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
       // routing, VLANs and everything else: keep the text (with "router …"/"vlan …"/"line …" blocks) so show run still lists it
       if (/^(no\s+)?(router|ip|ipv6|access-list|line|banner|enable|service|username|vlan|spanning-tree|crypto|ntp|logging|snmp-server|aaa|cdp|lldp|clock|security|license)\b/i.test(t) || cli.mode === "config-x") {
         const ex = [...(d.cliExtra || [])], low = x => x.trim().toLowerCase(), blockEnd = k => { let e2 = k + 1; while (e2 < ex.length && /^\s/.test(ex[e2])) e2++; return e2; };
+        const enc = ex.some(x => low(x) === "service password-encryption");
         if (cli.mode === "config-x") {
           let k = ex.findIndex(x => !/^\s/.test(x) && low(x) === low(cli.xHead || "")); if (k < 0) { ex.push(cli.xHead); k = ex.length - 1; }
-          const e2 = blockEnd(k), body = t.replace(/^no\s+/i, "").trim();
-          if (neg) { const j = ex.slice(k + 1, e2).findIndex(x => low(x) === body.toLowerCase()); if (j >= 0) ex.splice(k + 1 + j, 1); }
-          else if (!ex.slice(k + 1, e2).some(x => low(x) === t.toLowerCase())) ex.splice(e2, 0, " " + t);
+          const e2 = blockEnd(k), body = t.replace(/^no\s+/i, "").trim(), key = subKey(body), same = x => key ? subKey(x.trim()) === key : low(x) === body.toLowerCase();
+          if (neg) { const j = ex.slice(k + 1, e2).findIndex(same); if (j >= 0) ex.splice(k + 1 + j, 1); }
+          else {
+            const line = " " + (/^password\s/i.test(body) ? pwForm("password", body.replace(/^password\s+/i, ""), enc) : body);
+            if (/^password\s/i.test(body) && !pwParse(body.replace(/^password\s+/i, ""))) return bad("% Incomplete command.");
+            const j = ex.slice(k + 1, e2).findIndex(same); if (j >= 0) ex[k + 1 + j] = line; else ex.splice(e2, 0, line);
+          }
         } else {
-          const body = t.replace(/^no\s+/i, "").trim(), isBlock = /^(router|line|vlan)\s/i.test(body);
-          const k = ex.findIndex(x => !/^\s/.test(x) && low(x) === body.toLowerCase());
+          let body = t.replace(/^no\s+/i, "").trim(); const isBlock = /^(router|line|vlan)\s/i.test(body);
+          if (/^line\s/i.test(body)) body = lineHead(body);
+          const key = topKey(body), same = x => !/^\s/.test(x) && (key ? topKey(x) === key : low(x) === body.toLowerCase());
+          if (!neg && key) {   // single-valued settings are replaced, secrets kept in the form IOS shows
+            const m = body.match(/^enable\s+(secret|password)\s+(.+)$/i), u = body.match(/^username\s+(\S+)\s+(?:privilege\s+\d+\s+)?(secret|password)\s+(.+)$/i);
+            if (/^enable\s+(secret|password)\s*$/i.test(body) || (/^username\s/i.test(body) && !u)) return bad("% Incomplete command.");
+            if (m) body = m[1].toLowerCase() === "secret" ? secretForm("enable secret", m[2]) : pwForm("enable password", m[2], enc);
+            if (u) body = u[2].toLowerCase() === "secret" ? secretForm(`username ${u[1]} secret`, u[3]) : pwForm(`username ${u[1]} password`, u[3], enc);
+            if (body == null) return bad("% Invalid encrypted password");
+          }
+          const k = ex.findIndex(same);
           if (neg) { if (k >= 0) ex.splice(k, isBlock ? blockEnd(k) - k : 1); }
-          else { if (k < 0) ex.push(body); if (isBlock) { cli.mode = "config-x"; cli.xHead = body; } }
+          else {
+            if (k < 0) ex.push(body); else if (key) ex[k] = body;
+            if (isBlock) { cli.mode = "config-x"; cli.xHead = body; }
+            if (low(body) === "service password-encryption") ex.forEach((x, j) => { const m = x.match(/^(\s*(?:enable password|password|username \S+ password))\s+(?:0\s+)?(\S.*)$/i); if (m && !/^7\s/.test(m[2])) ex[j] = m[1] + " 7 " + t7enc(m[2]); });
+          }
         }
         await store.save("devices", d.id, { ...strip(d), cliExtra: ex.slice(-400), updatedAt: new Date().toISOString() }); d.cliExtra = ex.slice(-400);
         return;
@@ -3899,26 +3977,27 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
   }
   async function cliRun(text) {
     for (const raw of text.split(/\r?\n/)) {
-      cliOut(cliPrompt() + raw, "cli-cmd");
-      if (cli.ask) { const a = cli.ask; cli.ask = null; try { await a.fn(raw.trim()); } catch (e) { cliOut("% " + (e.message || e), "cli-err"); } $("#cliPrompt").textContent = cliPrompt(); continue; }
+      if (cli.ask?.lock && !needLogin(cliDev())) cli.ask = null;
+      cliOut(cliPrompt() + (cli.ask?.secret ? "" : raw), "cli-cmd");
+      if (cli.ask) { const a = cli.ask; cli.ask = null; try { await a.fn(raw.trim()); } catch (e) { cliOut("% " + (e.message || e), "cli-err"); } cliSync(); continue; }
       try { await cliExec(raw); } catch (e) { cliOut("% 저장하지 못했습니다: " + (e.message || e), "cli-err"); }
-      $("#cliPrompt").textContent = cliPrompt();
+      cliSync();
     }
     render();
   }
   // ---- Tab completion, as on IOS: the word being typed is completed when exactly one command fits it
-  const CT_SHOW = { ip: { interface: { brief: {} }, route: {} }, "running-config": {}, "startup-config": {}, interfaces: {}, version: {}, controllers: {}, vlan: { brief: {} }, cdp: { neighbors: {} }, clock: {}, history: {} };
+  const CT_SHOW = { ip: { interface: { brief: {} }, route: {} }, "running-config": {}, "startup-config": {}, interfaces: {}, version: {}, controllers: {}, vlan: { brief: {} }, cdp: { neighbors: {} }, clock: {}, history: {}, privilege: {} };
   const CT_IFT = { GigabitEthernet: null, FastEthernet: null, TenGigabitEthernet: null, Serial: null, Loopback: null, Vlan: null, Tunnel: null, "Port-channel": null };
   const CT_PRIV = { configure: { terminal: {} }, show: CT_SHOW, copy: { "running-config": { "startup-config": {} }, "startup-config": { "running-config": {} } }, write: { memory: {}, erase: {} }, erase: { "startup-config": {} },
     reload: {}, ping: {}, traceroute: {}, clock: { set: {} }, terminal: { length: {}, monitor: {} }, debug: {}, undebug: { all: {} }, disable: {}, exit: {}, logout: {}, enable: {} };
-  const CT_CONFIG = { hostname: {}, interface: CT_IFT, ip: { route: {}, "default-gateway": {}, routing: {} }, router: { rip: {}, ospf: {}, eigrp: {} }, vlan: {}, line: { console: {}, vty: {} },
+  const CT_CONFIG = { hostname: {}, interface: CT_IFT, ip: { route: {}, "default-gateway": {}, routing: {} }, router: { rip: {}, ospf: {}, eigrp: {} }, vlan: {}, line: { console: {}, vty: {}, aux: {} },
     enable: { secret: {}, password: {} }, banner: { motd: {} }, service: { "password-encryption": {} }, "spanning-tree": {}, "access-list": {}, username: {}, do: CT_PRIV, exit: {}, end: {} };
   CT_CONFIG.no = CT_CONFIG;
   const CT_IF = { ip: { address: {} }, shutdown: {}, description: {}, switchport: { mode: { access: {}, trunk: {} }, access: { vlan: {} }, trunk: { allowed: { vlan: {} }, native: { vlan: {} } } },
     encapsulation: { ppp: {}, hdlc: {}, dot1Q: {}, "frame-relay": {} }, clock: { rate: {} }, bandwidth: {}, speed: { auto: {}, "10": {}, "100": {}, "1000": {} }, duplex: { auto: {}, full: {}, half: {} },
     interface: CT_IFT, do: CT_PRIV, exit: {}, end: {} };
   CT_IF.no = CT_IF;
-  const CT_X = { network: {}, "router-id": {}, version: {}, "auto-summary": {}, "passive-interface": {}, "default-information": { originate: {} }, redistribute: {}, name: {}, password: {}, login: {}, "transport": { input: {} }, "exec-timeout": {}, exit: {}, end: {} };
+  const CT_X = { network: {}, "router-id": {}, version: {}, "auto-summary": {}, "passive-interface": {}, "default-information": { originate: {} }, redistribute: {}, name: {}, password: {}, login: { local: {} }, logging: { synchronous: {} }, "transport": { input: {} }, "exec-timeout": {}, exit: {}, end: {} };
   CT_X.no = CT_X;
   const CT_HOST = { ipconfig: { "/all": {} }, ping: {}, tracert: {}, cls: {}, help: {} };
   function cliComplete(line) {
@@ -3946,7 +4025,7 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
   $("#cliIn").addEventListener("keydown", async e => {
     const inp = e.target;
     if (e.key === "Tab") {
-      e.preventDefault(); if (e.shiftKey || cli.busy) return;
+      e.preventDefault(); if (e.shiftKey || cli.busy || cli.ask) return;
       const v = inp.value.slice(0, inp.selectionStart ?? inp.value.length), rest = inp.value.slice(v.length);
       const r = cliComplete(v);
       if (r != null) { inp.value = r + rest; inp.setSelectionRange(r.length, r.length); }
@@ -3955,12 +4034,12 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
     if (e.key === "Enter") {
       e.preventDefault(); if (cli.busy) return;
       const v = inp.value; inp.value = "";
-      if (v.trim()) { cli.hist.push(v); if (cli.hist.length > 100) cli.hist.shift(); }
+      if (v.trim() && !cli.ask) { cli.hist.push(v); if (cli.hist.length > 100) cli.hist.shift(); }
       cli.hp = cli.hist.length; cli.busy = true;
       try { await cliRun(v); } finally { cli.busy = false; }
     } else if (e.key === "ArrowUp") { e.preventDefault(); if (cli.hp > 0) inp.value = cli.hist[--cli.hp]; }
     else if (e.key === "ArrowDown") { e.preventDefault(); if (cli.hp < cli.hist.length - 1) inp.value = cli.hist[++cli.hp]; else { cli.hp = cli.hist.length; inp.value = ""; } }
-    else if (e.key === "z" && e.ctrlKey) { e.preventDefault(); if (cli.mode.startsWith("config")) { cliOut(cliPrompt() + "^Z", "cli-cmd"); cli.mode = "priv"; cli.ifId = null; $("#cliPrompt").textContent = cliPrompt(); } }
+    else if (e.key === "z" && e.ctrlKey) { e.preventDefault(); if (cli.mode.startsWith("config")) { cliOut(cliPrompt() + "^Z", "cli-cmd"); cli.mode = "priv"; cli.ifId = null; cliSync(); } }
   });
   // pasting several lines runs them one by one, like pasting into a console
   $("#cliIn").addEventListener("paste", async e => {
@@ -4164,12 +4243,12 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
     const d = ptDev(); if (!d || cli.busy) return;
     const key = d.id + "|" + cmds.join("\n"); if (key === ptLast.k && Date.now() - ptLast.t < 1500) return; ptLast = { k: key, t: Date.now() };   // Enter + blur fire twice
     cliSwitch(d.id);
-    cli.busy = true; const keep = { mode: cli.mode, ifId: cli.ifId };
+    cli.busy = true; const keep = { mode: cli.mode, ifId: cli.ifId, ask: cli.ask }; cli.ask = null;
     cli.mode = "config"; cli.ifId = null; cli.mirror = true;
     try {
-      for (const c of cmds) { const line = cliPrompt() + c; eqOut(line, "cli-cmd"); const mir = cli.mirror; cli.mirror = false; cliOut(line, "cli-cmd"); cli.mirror = mir; await cliExec(c); while (cli.ask) { const a = cli.ask; cli.ask = null; eqOut(a.text, "cli-cmd"); await a.fn(""); } }
+      for (const c of cmds) { const line = cliPrompt() + c; eqOut(line, "cli-cmd"); const mir = cli.mirror; cli.mirror = false; cliOut(line, "cli-cmd"); cli.mirror = mir; await cliExec(c); for (let g = 0; cli.ask && g < 5; g++) { const a = cli.ask; cli.ask = null; eqOut(a.text, "cli-cmd"); await a.fn(""); } }
     } catch (e) { eqOut("% 저장하지 못했습니다: " + (e.message || e), "cli-err"); }
-    finally { cli.mirror = false; cli.busy = false; cli.mode = keep.mode; cli.ifId = keep.ifId; if (!state.ifaces.some(x => x.id === cli.ifId)) { cli.ifId = null; if (cli.mode === "config-if") cli.mode = "config"; } }
+    finally { cli.mirror = false; cli.busy = false; cli.mode = keep.mode; cli.ifId = keep.ifId; cli.ask = keep.ask; if (!state.ifaces.some(x => x.id === cli.ifId)) { cli.ifId = null; if (cli.mode === "config-if") cli.mode = "config"; } }
     const fid = document.activeElement?.id;
     render(); renderPt(true);
     if (fid && fid.startsWith("pf_")) { const el = document.getElementById(fid); el?.focus(); }
