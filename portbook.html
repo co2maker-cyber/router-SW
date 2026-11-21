@@ -3429,7 +3429,7 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
   function cliSwitch(id) {
     if (cli.dev === id) return;
     if (cli.dev) cli.sessions[cli.dev] = { mode: cli.mode, ifId: cli.ifId, xHead: cli.xHead, html: $("#cliOut").innerHTML };
-    cli.dev = id; const s = cli.sessions[id], d = state.devices.find(x => x.id === id);
+    cli.ask = null; cli.dev = id; const s = cli.sessions[id], d = state.devices.find(x => x.id === id);
     if (s) { cli.mode = s.mode; cli.ifId = s.ifId; cli.xHead = s.xHead; $("#cliOut").innerHTML = s.html; }
     else { cli.mode = "user"; cli.ifId = null; cli.xHead = null; if (d) (CLI_OK_KINDS.includes(d.kind) ? cliBoot : hostBoot)(d); }
     $("#cliPrompt").textContent = cliPrompt();
@@ -3451,6 +3451,7 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
   const cliIf = () => state.ifaces.find(x => x.id === cli.ifId);
   function cliPrompt() {
     const d = cliDev(); if (!d) return ">";
+    if (cli.ask) return cli.ask.text;
     if (!CLI_OK_KINDS.includes(d.kind)) return "C:\\>";
     const h = d.name.replace(/\s+/g, "");
     return h + ({ user: ">", priv: "#", config: "(config)#", "config-if": cliIf()?.ifNum?.includes(".") ? "(config-subif)#" : "(config-if)#", "config-x": /^vlan/i.test(cli.xHead || "") ? "(config-vlan)#" : /^line/i.test(cli.xHead || "") ? "(config-line)#" : "(config-router)#" })[cli.mode];
@@ -3461,6 +3462,8 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
     cliOut(""); cliOut(`${d.name.replace(/\s+/g, "")} con0 is now available`); cliOut(""); cliOut("Press RETURN to get started!"); cliOut(""); cliOut("");
   }
   function cliOut(text, cls = "") {
+    if (cli.quiet) return;
+    if (cli.cap) { cli.cap.push([text, cls]); return; }
     const o = $("#cliOut"), div = document.createElement("div");
     if (cls) div.className = cls; div.textContent = text; o.appendChild(div); const t = $("#cliTerm"); t.scrollTop = t.scrollHeight;
     if (cli.mirror) eqOut(text, cls);
@@ -3519,7 +3522,9 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
   }
   const CLI_HELP = {
     user: ["enable          특권 모드로", "show ...        정보 보기 (show ip interface brief, show running-config)", "exit            나가기"],
-    priv: ["configure terminal   설정 모드로", "show ip interface brief", "show running-config", "show interfaces <이름>", "copy running-config startup-config / write memory", "disable / exit"],
+    priv: ["configure terminal   설정 모드로", "copy running-config startup-config (copy ru st) / write memory (wr)", "copy startup-config running-config", "erase startup-config / write erase", "reload               다시 켜기",
+      "show running-config / startup-config", "show ip interface brief / ip route", "show interfaces <이름> / controllers <시리얼>", "show vlan brief / cdp neighbors / clock / history / version",
+      "ping <IP> / traceroute <IP>", "clock set 14:30:00 21 Nov 2026", "terminal length 0 / debug … / undebug all", "disable / exit / logout"],
     config: ["hostname <이름>", "interface <이름>     예: interface g0/0, int s0/0/0, int lo0, int g0/0.10", "ip route / router ospf … (기록만 하고 show run에 남김)", "no <명령>", "do <특권 명령>       예: do show ip int brief", "exit / end"],
     "config-if": ["ip address <IP> <마스크>", "no ip address", "shutdown / no shutdown", "description <메모>", "switchport mode access|trunk", "switchport access vlan <번호>", "switchport trunk allowed vlan <목록>", "encapsulation ppp|hdlc|dot1Q <VLAN>", "clock rate <값>  (DCE 시리얼)", "bandwidth <kbps> / speed <값>", "exit / end"],
     "config-x": ["network … / router-id … 등 라우팅 명령 (기록만 함)", "exit / end"]
@@ -3544,11 +3549,213 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
     if (peer && peer.status === "down" && up) await cliSaveIf(peer, { status: "up" });
     return { up, linked };
   }
+  // ---- privileged commands that save, erase, reload and look around (Packet Tracer wording)
+  const cfgBody = d => cliShowRun(d).slice(2);   // drop "Building configuration..." and the blank line
+  const cfgDirty = d => !d.startupCfg || d.startupCfg.join("\n") !== cfgBody(d).join("\n");
+  const cliAsk = (text, fn) => { cli.ask = { text, fn }; };
+  const yes = v => /^(y|ye|yes)$/i.test(v), no = v => /^(n|no)$/i.test(v);
+  async function cliSaveStartup(d) {
+    cliOut("Building configuration...");
+    const body = cfgBody(d);
+    await store.save("devices", d.id, { ...strip(d), startupCfg: body, updatedAt: new Date().toISOString() }); d.startupCfg = body;
+    cliOut("[OK]");
+  }
+  function cliReboot(d) {
+    const md = d.model ? (ROUTERS[d.model]?.label || "Cisco " + d.model) : KIND[d.kind];
+    ["", "System Bootstrap, Version 15.1(4)M4, RELEASE SOFTWARE (fc1)", "Technical Support: http://www.cisco.com/techsupport", "Copyright (c) 2010 by cisco Systems, Inc.",
+      `${md} platform with 524288 Kbytes of main memory`, "", "Readonly ROMMON initialized", "", "program load complete, entry point: 0x80803000, size: 0x1b340",
+      "########################################################################## [OK]", "", "Restricted Rights Legend", "", "Cisco IOS Software (포트북 모의 CLI)"].forEach(x => cliOut(x));
+    if (!d.startupCfg) cliOut("(startup-config가 없습니다. 실제 장비라면 설정이 비어 있는 상태로 켜집니다. 포트북 기록은 그대로 둡니다)", "cli-warn");
+    else if (cfgDirty(d)) cliOut("(저장하지 않은 설정이 있습니다. 실제 장비라면 사라지지만 포트북 기록은 그대로 둡니다)", "cli-warn");
+    ["", "Press RETURN to get started!", ""].forEach(x => cliOut(x));
+    cli.mode = "user"; cli.ifId = null; cli.xHead = null;
+    for (const i of ifacesOf(d.id).filter(i => i.status === "up")) cliOut(`%LINK-5-CHANGED: Interface ${i.name}, changed state to up`, "cli-log");
+  }
+  async function cliExecMore(d, tok, bad) {
+    const w = tok.map(x => x.toLowerCase()), [A, B, C] = w, priv = cli.mode === "priv";
+    const need = () => { bad("% 특권 모드 명령입니다. enable 을 먼저 입력하세요."); return true; };
+    if (kw(A, "logout", 4)) { cli.mode = "user"; cliOut(""); cliOut(`${d.name.replace(/\s+/g, "")} con0 is now available`); cliOut(""); cliOut("Press RETURN to get started!"); return true; }
+    if (kw(A, "terminal", 3)) return true;   // terminal length 0, terminal monitor ...
+    if (kw(A, "traceroute", 4)) {
+      if (!tok[1] || !ipRe.test(tok[1])) { bad("% Unrecognized host or address, or protocol not running."); return true; }
+      const r = pingResult(d, tok[1]);
+      cliOut("Type escape sequence to abort."); cliOut(`Tracing the route to ${tok[1]}`); cliOut("");
+      (r.ok ? (r.hops.length ? r.hops : [tok[1]]) : r.hops).forEach((h, k) => cliOut(`  ${String(k + 1).padStart(2)}   ${h.padEnd(16)} 0 msec    0 msec    0 msec`));
+      if (!r.ok) { for (let k = r.hops.length; k < r.hops.length + 3; k++) cliOut(`  ${String(k + 1).padStart(2)}   *    *    *`); cliOut(pingWhy(r), "cli-warn"); }
+      return true;
+    }
+    if (kw(A, "clock", 2) && kw(B, "set", 2)) {
+      if (!priv) return need();
+      const dt = new Date(`${tok[3]} ${tok[4]} ${tok[5]} ${tok[2]} UTC`);
+      if (!tok[2] || !/^\d{1,2}:\d{2}(:\d{2})?$/.test(tok[2]) || isNaN(dt)) { bad("% Incomplete command.  예: clock set 14:30:00 21 Nov 2026"); return true; }
+      cli.clockOff = dt.getTime() - Date.now(); return true;
+    }
+    if (kw(A, "debug", 3) || kw(A, "undebug", 3) || (A === "no" && kw(B, "debug", 3))) { if (!priv) return need(); if (kw(A, "undebug", 3) || C === "all" || B === "all") cliOut("All possible debugging has been turned off"); return true; }
+    if (kw(A, "write", 2)) {
+      if (!priv) return need();
+      if (kw(B, "erase", 2)) { tok = ["erase", "startup-config"]; w.splice(0, 2, "erase", "startup-config"); }
+      else if (!B || kw(B, "memory", 1)) { await cliSaveStartup(d); return true; }
+      else { bad(); return true; }
+    }
+    if (kw(w[0], "erase", 3)) {
+      if (!priv) return need();
+      if (!kw(w[1], "startup-config", 2) && !kw(w[1], "nvram:", 2)) { bad("% Incomplete command.  예: erase startup-config"); return true; }
+      cliAsk("Erasing the nvram filesystem will remove all configuration files! Continue? [confirm]", async v => {
+        if (no(v)) return;
+        await store.save("devices", d.id, { ...strip(d), startupCfg: null, updatedAt: new Date().toISOString() }); d.startupCfg = null;
+        cliOut("[OK]"); cliOut("Erase of nvram: complete"); cliOut("%SYS-7-NV_BLOCK_INIT: Initialized the geometry of nvram", "cli-log");
+      });
+      return true;
+    }
+    if (kw(A, "copy", 2)) {
+      if (!priv) return need();
+      const src = kw(B, "running-config", 2) ? "run" : kw(B, "startup-config", 2) ? "start" : null, dst = kw(C, "running-config", 2) ? "run" : kw(C, "startup-config", 2) ? "start" : null;
+      if (!src || !dst || src === dst) { bad("% 지원하는 copy: copy running-config startup-config, copy startup-config running-config"); return true; }
+      if (src === "run") { cliAsk("Destination filename [startup-config]? ", async () => cliSaveStartup(d)); return true; }
+      cliAsk("Destination filename [running-config]? ", async () => {
+        if (!d.startupCfg) { cliOut("%Error opening nvram:/startup-config (No such file or directory)", "cli-err"); return; }
+        const keep = { mode: cli.mode }; cli.mode = "config"; cli.quiet = true;
+        try { for (const l of d.startupCfg) { const t = l.trimEnd(); if (!t.trim() || /^(!|end$|building configuration|current configuration)/i.test(t.trim())) continue; if (!/^\s/.test(t) && cli.mode !== "config") { cli.mode = "config"; cli.ifId = null; } await cliExec(t.trim()); } } finally { cli.quiet = false; }
+        cli.mode = keep.mode; cli.ifId = null;
+        cliOut(`${d.startupCfg.join("\n").length} bytes copied in 0.416 secs`);
+      });
+      return true;
+    }
+    if (kw(A, "reload", 3)) {
+      if (!priv) return need();
+      const proceed = () => cliAsk("Proceed with reload? [confirm]", async v => { if (no(v)) return; cliReboot(d); });
+      if (cfgDirty(d)) {
+        const ask = () => cliAsk("System configuration has been modified. Save? [yes/no]:", async v => {
+          if (yes(v)) { await cliSaveStartup(d); proceed(); }
+          else if (no(v)) proceed();
+          else { cliOut("% Please answer 'yes' or 'no'."); ask(); }
+        });
+        ask();
+      } else proceed();
+      return true;
+    }
+    return false;
+  }
+  // show commands beyond the basics
+  function cliShowMore(d, tok) {
+    const w = tok.map(x => x.toLowerCase()), B = w[1], C = w[2];
+    const pad = (x, n) => String(x).padEnd(n);
+    if (kw(B, "startup-config", 3)) {
+      if (!d.startupCfg) { cliOut("startup-config is not present"); return true; }
+      cliOut(`Using ${d.startupCfg.join("\n").length} bytes`); d.startupCfg.forEach(x => cliOut(x)); return true;
+    }
+    if (kw(B, "clock", 2)) {
+      const t = new Date(Date.now() + (cli.clockOff || 0)), dn = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], mn = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const z = n => String(n).padStart(2, "0");
+      cliOut(`*${z(t.getUTCHours())}:${z(t.getUTCMinutes())}:${z(t.getUTCSeconds())}.${String(t.getUTCMilliseconds()).padStart(3, "0")} UTC ${dn[t.getUTCDay()]} ${mn[t.getUTCMonth()]} ${t.getUTCDate()} ${t.getUTCFullYear()}`); return true;
+    }
+    if (kw(B, "history", 2)) { cli.hist.slice(-10).forEach(x => cliOut("  " + x)); return true; }
+    if (kw(B, "controllers", 3)) {
+      const s = cliIfName(tok.slice(2).join("")); const i = s && ifacesOf(d.id).find(x => x.name.toLowerCase() === (s.type + s.num).toLowerCase());
+      if (!i) { cliOut("% Invalid interface type and number", "cli-err"); return true; }
+      if (ifTypeOf(i) !== "Serial") { cliOut(`Interface ${i.name}`); cliOut("Hardware is Ethernet"); return true; }
+      const role = i.cable?.kind === "serial" ? (i.cable.dce === i.id ? "DCE" : "DTE") : null;
+      cliOut(`Interface ${i.name}`); cliOut("Hardware is PowerQUICC MPC860");
+      cliOut(role ? `${role} V.35, ${role === "DCE" ? (i.clockRate ? "clock rate " + i.clockRate : "clock rate not set") : "clocks stopped"}` : "No serial cable attached");
+      return true;
+    }
+    if (kw(B, "vlan", 1) && d.kind !== "router") {
+      const ex = d.cliExtra || [], vl = new Map([["1", "default"]]);
+      ex.forEach((x, j) => { const m = x.match(/^vlan\s+(\d+)/i); if (m) { const nm = (ex[j + 1] || "").match(/^\s+name\s+(\S+)/i); vl.set(m[1], nm ? nm[1] : "VLAN" + m[1].padStart(4, "0")); } });
+      const ports = ifacesOf(d.id).filter(i => i.mode === "access");
+      ports.forEach(i => { const v = String(i.vlan || 1); if (!vl.has(v)) vl.set(v, "VLAN" + v.padStart(4, "0")); });
+      cliOut(pad("VLAN", 5) + pad("Name", 33) + pad("Status", 10) + "Ports"); cliOut("---- -------------------------------- --------- -------------------------------");
+      [...vl.keys()].sort((a, b) => a - b).forEach(v => {
+        const ps = ports.filter(i => String(i.vlan || 1) === v).map(i => abbr(i.name)), rows = []; for (let k = 0; k < ps.length; k += 4) rows.push(ps.slice(k, k + 4).join(", "));
+        cliOut(pad(v, 5) + pad(vl.get(v), 33) + pad("active", 10) + (rows[0] || "")); rows.slice(1).forEach(r => cliOut(" ".repeat(48) + r));
+      });
+      [["1002", "fddi-default"], ["1003", "token-ring-default"], ["1004", "fddinet-default"], ["1005", "trnet-default"]].forEach(([v, n]) => cliOut(pad(v, 5) + pad(n, 33) + "active"));
+      return true;
+    }
+    if (kw(B, "cdp", 2) && kw(C, "neighbors", 1)) {
+      const sh = n => { const m = String(n).match(/^([A-Za-z]+)(.*)$/); return m ? m[1].slice(0, 3) + " " + m[2] : n; };
+      cliOut("Capability Codes: R - Router, T - Trans Bridge, B - Source Route Bridge"); cliOut("                  S - Switch, H - Host, I - IGMP, r - Repeater, P - Phone"); cliOut("");
+      cliOut(pad("Device ID", 17) + pad("Local Intrfce", 16) + pad("Holdtme", 11) + pad("Capability", 13) + pad("Platform", 12) + "Port ID");
+      for (const i of ifacesOf(d.id)) {
+        if (i.status !== "up" || !i.peerIfId) continue;
+        const o = state.ifaces.find(x => x.id === i.peerIfId), od = o && state.devices.find(x => x.id === o.deviceId);
+        if (!od || !CLI_OK_KINDS.includes(od.kind) || o.status !== "up") continue;
+        const cap = { router: "R", firewall: "R", switch: "S", l3switch: "R S" }[od.kind] || "";
+        cliOut(pad(od.name.replace(/\s+/g, ""), 17) + pad(sh(i.name), 16) + pad("150", 11) + pad(cap, 13) + pad(od.model || "", 12) + sh(o.name));
+      }
+      return true;
+    }
+    if (kw(B, "ip") && kw(C, "route", 1)) { cliShowRoute(d); return true; }
+    return false;
+  }
+  function cliShowRoute(d) {
+    cliOut("Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP");
+    cliOut("       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area");
+    cliOut("       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2");
+    cliOut("       E1 - OSPF external type 1, E2 - OSPF external type 2, E - EGP");
+    cliOut("       i - IS-IS, L1 - IS-IS level-1, L2 - IS-IS level-2, ia - IS-IS inter area");
+    cliOut("       * - candidate default, U - per-user static route, o - ODR");
+    cliOut("       P - periodic downloaded static route"); cliOut("");
+    const M = netModel(), mine = M.l3.filter(x => x.dev.id === d.id), rt = [];
+    for (const x of mine) {
+      rt.push({ c: "C", net: netOf(x.i.ip, x.i.prefix), tail: `is directly connected, ${x.i.name}` });
+      if (x.i.prefix < 32) rt.push({ c: "L", net: x.i.ip + "/32", tail: `is directly connected, ${x.i.name}` });
+    }
+    let gw = null;
+    for (const line of d.cliExtra || []) {
+      const m = line.match(/^ip route\s+(\S+)\s+(\S+)\s+(\S+)/i); if (!m || !ipRe.test(m[1]) || !ipRe.test(m[2])) continue;
+      const p = parsePrefix(m[2]); if (p == null || Number.isNaN(p)) continue;
+      const net = netOf(m[1], p);
+      if (p === 0) { gw = m[3]; rt.push({ c: "S*", net, tail: ipRe.test(m[3]) ? `[1/0] via ${m[3]}` : `is directly connected, ${m[3]}` }); }
+      else rt.push({ c: "S", net, tail: ipRe.test(m[3]) ? `[1/0] via ${m[3]}` : `is directly connected, ${m[3]}` });
+    }
+    const blocks = protoBlocks(d);
+    if (blocks.length) {
+      const have = new Set(rt.map(r => r.net)), code = { rip: ["R", "120/1"], ospf: ["O", "110/2"], eigrp: ["D", "90/2172416"] };
+      for (const x of M.l3) {
+        if (x.dev.id === d.id || !routerish(x.dev)) continue;
+        const net = netOf(x.i.ip, x.i.prefix); if (have.has(net)) continue;
+        const [n, len] = net.split("/"); const host = intToIp(ipToInt(n) + (+len < 31 ? 1 : 0));
+        if ((d.cliExtra || []).some(l => { const m = l.match(/^ip route\s+(\S+)\s+(\S+)/i); const p = m && parsePrefix(m[2]); return m && p && inNet(host, m[1], p); })) continue;
+        const blk = blocks.find(b => protoBlocks(x.dev).some(o => o.p === b.p && covered(x.i.ip, o))); if (!blk) continue;
+        const r = routeAt(M, { ...d, cliExtra: (d.cliExtra || []).filter(l => !/^ip route\s/i.test(l)) }, host); if (!r || r[1] === host) continue;
+        have.add(net); rt.push({ c: code[blk.p][0], net, tail: `[${code[blk.p][1]}] via ${r[1]}, 00:00:12, ${r[0].i.name}` });
+      }
+    }
+    cliOut(gw ? `Gateway of last resort is ${gw} to network 0.0.0.0` : "Gateway of last resort is not set"); cliOut("");
+    // group by classful network, as IOS prints it
+    const groups = new Map();
+    for (const r of rt) { const [n, len] = r.net.split("/"); const cn = +len === 0 ? "0.0.0.0/0" : classfulNet(n); if (!groups.has(cn)) groups.set(cn, []); groups.get(cn).push(r); }
+    const key = n => { const [a, l] = n.split("/"); return ipToInt(a) * 64 + +l; };
+    for (const [cn, list] of [...groups].sort((a, b) => key(a[0]) - key(b[0]))) {
+      list.sort((a, b) => key(a.net) - key(b.net));
+      const cl = cn.split("/")[1];
+      if (list.length === 1 && list[0].net.split("/")[1] === cl) { const r = list[0]; cliOut(`${r.c.padEnd(5)}${r.net} ${r.tail}`); continue; }
+      const masks = new Set(list.map(r => r.net.split("/")[1]));
+      cliOut(masks.size > 1 ? `     ${cn} is variably subnetted, ${list.length} subnets, ${masks.size} masks` : `     ${cn.split("/")[0]}/${[...masks][0]} is subnetted, ${list.length} subnets`);
+      for (const r of list) cliOut(`${r.c.padEnd(8)}${r.net} ${r.tail}`);
+    }
+  }
   async function cliExec(line) {
     const d = cliDev(); if (!d) return;
     if (!CLI_OK_KINDS.includes(d.kind)) return hostExec(d, line);
     let t = line.trim();
     if (!t || t.startsWith("!")) return;
+    const pm = !cli.cap && t.match(/^(.*?)\s*\|\s*(\S+)\s+(.+)$/);
+    if (pm && /^(sh|sho|show|do)$/i.test(pm[1].split(/\s+/)[0])) {   // show ... | include / exclude / begin / section
+      const how = pm[2].toLowerCase(), kind = kw(how, "include", 1) ? "i" : kw(how, "exclude", 1) ? "e" : kw(how, "begin", 1) ? "b" : kw(how, "section", 1) ? "s" : null;
+      if (!kind) { cliOut("% Invalid input detected at '^' marker.", "cli-err"); return; }
+      let re; try { re = new RegExp(pm[3].trim()); } catch (e) { re = { test: x => x.includes(pm[3].trim()) }; }
+      cli.cap = []; try { await cliExec(pm[1]); } finally { const out = cli.cap; cli.cap = null;
+        if (kind === "s") {   // a section = a top-level line and the indented lines under it; shown whole when any line matches
+          const secs = []; for (const r of out) { if (!/^\s/.test(r[0]) || !secs.length) secs.push([]); secs[secs.length - 1].push(r); }
+          secs.filter(g => g.some(([x]) => re.test(x))).flat().forEach(([x, cl]) => cliOut(x, cl));
+        } else {
+          let on = false;
+          for (const [x, cl] of out) if (cl === "cli-err" || cl === "cli-warn" || (kind === "i" ? re.test(x) : kind === "e" ? !re.test(x) : (on ||= re.test(x)))) cliOut(x, cl);
+        } }
+      return;
+    }
     const tok = t.split(/\s+/), [a, b, c] = tok, A = (a || "").toLowerCase();
     const bad = msg => cliOut(msg || `% Invalid input detected at '^' marker.`, "cli-err");
     if (A === "?" || t.endsWith("?")) { (CLI_HELP[cli.mode] || []).forEach(x => cliOut("  " + x, "cli-help")); return; }
@@ -3575,11 +3782,12 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
           return;
         }
         if (kw(B, "version", 2)) { cliOut(`Cisco IOS Software · ${d.model ? (ROUTERS[d.model]?.label || "Cisco " + d.model) : KIND[d.kind]} (포트북 모의 CLI)`); return; }
-        return bad("% 지원하는 show: running-config, ip interface brief, interfaces, version");
+        if (cliShowMore(d, tok)) return;
+        return bad("% 지원하는 show: running-config, startup-config, ip interface brief, ip route, interfaces, controllers, vlan brief, cdp neighbors, clock, history, version");
       }
       if (cli.mode === "priv" && kw(A, "configure", 4)) { cli.mode = "config"; cliOut("Enter configuration commands, one per line.  End with CNTL/Z."); return; }
-      if (cli.mode === "priv" && (kw(A, "write", 2) || (kw(A, "copy", 3) && kw((b || "").toLowerCase(), "running-config", 3)))) { cliOut("Building configuration...", ""); cliOut("[OK]  (포트북은 바로바로 저장됩니다)"); return; }
-      if (kw(A, "ping", 2)) { await iosPing(d, b); return; }
+      if (await cliExecMore(d, tok, bad)) return;
+      if (kw(A, "ping", 2)) { if (!b) return bad("% Incomplete command."); await iosPing(d, b); return; }
       return bad(cli.mode === "user" ? "% 사용자 모드입니다. enable 을 먼저 입력하세요." : undefined);
     }
     const neg = A === "no", rest = neg ? tok.slice(1) : tok, R0 = (rest[0] || "").toLowerCase(), R1 = (rest[1] || "").toLowerCase();
@@ -3692,15 +3900,17 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
   async function cliRun(text) {
     for (const raw of text.split(/\r?\n/)) {
       cliOut(cliPrompt() + raw, "cli-cmd");
+      if (cli.ask) { const a = cli.ask; cli.ask = null; try { await a.fn(raw.trim()); } catch (e) { cliOut("% " + (e.message || e), "cli-err"); } $("#cliPrompt").textContent = cliPrompt(); continue; }
       try { await cliExec(raw); } catch (e) { cliOut("% 저장하지 못했습니다: " + (e.message || e), "cli-err"); }
       $("#cliPrompt").textContent = cliPrompt();
     }
     render();
   }
   // ---- Tab completion, as on IOS: the word being typed is completed when exactly one command fits it
-  const CT_SHOW = { ip: { interface: { brief: {} }, route: {} }, "running-config": {}, "startup-config": {}, interfaces: {}, version: {} };
+  const CT_SHOW = { ip: { interface: { brief: {} }, route: {} }, "running-config": {}, "startup-config": {}, interfaces: {}, version: {}, controllers: {}, vlan: { brief: {} }, cdp: { neighbors: {} }, clock: {}, history: {} };
   const CT_IFT = { GigabitEthernet: null, FastEthernet: null, TenGigabitEthernet: null, Serial: null, Loopback: null, Vlan: null, Tunnel: null, "Port-channel": null };
-  const CT_PRIV = { configure: { terminal: {} }, show: CT_SHOW, copy: { "running-config": { "startup-config": {} } }, write: { memory: {} }, ping: {}, disable: {}, exit: {}, enable: {} };
+  const CT_PRIV = { configure: { terminal: {} }, show: CT_SHOW, copy: { "running-config": { "startup-config": {} }, "startup-config": { "running-config": {} } }, write: { memory: {}, erase: {} }, erase: { "startup-config": {} },
+    reload: {}, ping: {}, traceroute: {}, clock: { set: {} }, terminal: { length: {}, monitor: {} }, debug: {}, undebug: { all: {} }, disable: {}, exit: {}, logout: {}, enable: {} };
   const CT_CONFIG = { hostname: {}, interface: CT_IFT, ip: { route: {}, "default-gateway": {}, routing: {} }, router: { rip: {}, ospf: {}, eigrp: {} }, vlan: {}, line: { console: {}, vty: {} },
     enable: { secret: {}, password: {} }, banner: { motd: {} }, service: { "password-encryption": {} }, "spanning-tree": {}, "access-list": {}, username: {}, do: CT_PRIV, exit: {}, end: {} };
   CT_CONFIG.no = CT_CONFIG;
@@ -3714,7 +3924,7 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
   function cliComplete(line) {
     const d = cliDev(); if (!d) return null;
     const host = !CLI_OK_KINDS.includes(d.kind);
-    let node = host ? CT_HOST : { user: { enable: {}, show: CT_SHOW, ping: {}, exit: {} }, priv: CT_PRIV, config: CT_CONFIG, "config-if": CT_IF, "config-x": { ...CT_X, ...CT_CONFIG } }[cli.mode];
+    let node = host ? CT_HOST : { user: { enable: {}, show: CT_SHOW, ping: {}, traceroute: {}, terminal: CT_PRIV.terminal, logout: {}, exit: {} }, priv: CT_PRIV, config: CT_CONFIG, "config-if": CT_IF, "config-x": { ...CT_X, ...CT_CONFIG } }[cli.mode];
     const m = line.match(/^(.*?)(\S*)$/), head = m[1], cur = m[2];
     if (!cur) return null;
     for (const t of head.trim().split(/\s+/).filter(Boolean)) {   // walk the earlier words; IOS accepts any unique abbreviation
@@ -3957,7 +4167,7 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
     cli.busy = true; const keep = { mode: cli.mode, ifId: cli.ifId };
     cli.mode = "config"; cli.ifId = null; cli.mirror = true;
     try {
-      for (const c of cmds) { const line = cliPrompt() + c; eqOut(line, "cli-cmd"); const mir = cli.mirror; cli.mirror = false; cliOut(line, "cli-cmd"); cli.mirror = mir; await cliExec(c); }
+      for (const c of cmds) { const line = cliPrompt() + c; eqOut(line, "cli-cmd"); const mir = cli.mirror; cli.mirror = false; cliOut(line, "cli-cmd"); cli.mirror = mir; await cliExec(c); while (cli.ask) { const a = cli.ask; cli.ask = null; eqOut(a.text, "cli-cmd"); await a.fn(""); } }
     } catch (e) { eqOut("% 저장하지 못했습니다: " + (e.message || e), "cli-err"); }
     finally { cli.mirror = false; cli.busy = false; cli.mode = keep.mode; cli.ifId = keep.ifId; if (!state.ifaces.some(x => x.id === cli.ifId)) { cli.ifId = null; if (cli.mode === "config-if") cli.mode = "config"; } }
     const fid = document.activeElement?.id;
