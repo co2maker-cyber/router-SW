@@ -3697,8 +3697,51 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
     }
     render();
   }
+  // ---- Tab completion, as on IOS: the word being typed is completed when exactly one command fits it
+  const CT_SHOW = { ip: { interface: { brief: {} }, route: {} }, "running-config": {}, "startup-config": {}, interfaces: {}, version: {} };
+  const CT_IFT = { GigabitEthernet: null, FastEthernet: null, TenGigabitEthernet: null, Serial: null, Loopback: null, Vlan: null, Tunnel: null, "Port-channel": null };
+  const CT_PRIV = { configure: { terminal: {} }, show: CT_SHOW, copy: { "running-config": { "startup-config": {} } }, write: { memory: {} }, ping: {}, disable: {}, exit: {}, enable: {} };
+  const CT_CONFIG = { hostname: {}, interface: CT_IFT, ip: { route: {}, "default-gateway": {}, routing: {} }, router: { rip: {}, ospf: {}, eigrp: {} }, vlan: {}, line: { console: {}, vty: {} },
+    enable: { secret: {}, password: {} }, banner: { motd: {} }, service: { "password-encryption": {} }, "spanning-tree": {}, "access-list": {}, username: {}, do: CT_PRIV, exit: {}, end: {} };
+  CT_CONFIG.no = CT_CONFIG;
+  const CT_IF = { ip: { address: {} }, shutdown: {}, description: {}, switchport: { mode: { access: {}, trunk: {} }, access: { vlan: {} }, trunk: { allowed: { vlan: {} }, native: { vlan: {} } } },
+    encapsulation: { ppp: {}, hdlc: {}, dot1Q: {}, "frame-relay": {} }, clock: { rate: {} }, bandwidth: {}, speed: { auto: {}, "10": {}, "100": {}, "1000": {} }, duplex: { auto: {}, full: {}, half: {} },
+    interface: CT_IFT, do: CT_PRIV, exit: {}, end: {} };
+  CT_IF.no = CT_IF;
+  const CT_X = { network: {}, "router-id": {}, version: {}, "auto-summary": {}, "passive-interface": {}, "default-information": { originate: {} }, redistribute: {}, name: {}, password: {}, login: {}, "transport": { input: {} }, "exec-timeout": {}, exit: {}, end: {} };
+  CT_X.no = CT_X;
+  const CT_HOST = { ipconfig: { "/all": {} }, ping: {}, tracert: {}, cls: {}, help: {} };
+  function cliComplete(line) {
+    const d = cliDev(); if (!d) return null;
+    const host = !CLI_OK_KINDS.includes(d.kind);
+    let node = host ? CT_HOST : { user: { enable: {}, show: CT_SHOW, ping: {}, exit: {} }, priv: CT_PRIV, config: CT_CONFIG, "config-if": CT_IF, "config-x": { ...CT_X, ...CT_CONFIG } }[cli.mode];
+    const m = line.match(/^(.*?)(\S*)$/), head = m[1], cur = m[2];
+    if (!cur) return null;
+    for (const t of head.trim().split(/\s+/).filter(Boolean)) {   // walk the earlier words; IOS accepts any unique abbreviation
+      if (!node) return null;
+      const keys = Object.keys(node), hit = keys.filter(k => k.toLowerCase() === t.toLowerCase()).concat(keys.filter(k => k.toLowerCase().startsWith(t.toLowerCase())));
+      const uniq = [...new Set(hit)]; if (!uniq.length || (uniq.length > 1 && uniq[0].toLowerCase() !== t.toLowerCase())) return null;
+      node = node[uniq[0]];
+    }
+    if (!node) return null;
+    const c = cur.toLowerCase(), ifm = cur.match(/^([A-Za-z-]+)(\d.*)$/);
+    if (node === CT_IFT && ifm) {   // "int g0/0" -> "int GigabitEthernet0/0"
+      const f = Object.keys(CT_IFT).filter(k => k.toLowerCase().startsWith(ifm[1].toLowerCase()));
+      return f.length === 1 ? head + f[0] + ifm[2] : null;
+    }
+    const f = Object.keys(node).filter(k => k.toLowerCase().startsWith(c));
+    if (f.length !== 1) return null;
+    return head + f[0] + (node[f[0]] === null ? "" : " ");
+  }
   $("#cliIn").addEventListener("keydown", async e => {
     const inp = e.target;
+    if (e.key === "Tab") {
+      e.preventDefault(); if (e.shiftKey || cli.busy) return;
+      const v = inp.value.slice(0, inp.selectionStart ?? inp.value.length), rest = inp.value.slice(v.length);
+      const r = cliComplete(v);
+      if (r != null) { inp.value = r + rest; inp.setSelectionRange(r.length, r.length); }
+      return;
+    }
     if (e.key === "Enter") {
       e.preventDefault(); if (cli.busy) return;
       const v = inp.value; inp.value = "";
