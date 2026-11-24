@@ -1,4 +1,10 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>포트북 인터페이스 대장</title>
+<script>
+(() => { try { const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (ios) document.querySelectorAll('meta[name="viewport"]').forEach(m => { if (!/maximum-scale/.test(m.content)) m.content += ", maximum-scale=1"; }); } catch (e) {} })();
+</script>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
@@ -329,7 +335,7 @@ dialog form { display: flex; flex-direction: column; }
 .zoombar button:hover { background: var(--sunk); }
 .topo-body { display: grid; grid-template-columns: minmax(0, 1fr); }
 .topo-body.with-cfg { grid-template-columns: minmax(0, 1fr) 330px; }
-@media (max-width: 820px) {
+@media (max-width: 900px) {
   .topo-body.with-cfg { grid-template-columns: minmax(0, 1fr); }
   .cfg { position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; max-height: 72vh !important; border-left: 0 !important; border-top: 1px solid var(--line);
     border-radius: 16px 16px 0 0; box-shadow: 0 -10px 30px rgb(10 20 35 / .28); padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -566,6 +572,55 @@ dialog.xwide { width: min(1180px, calc(100vw - 24px)); }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg);
   padding: 9px 16px; border-radius: var(--r); font-size: 13px; z-index: 50; max-width: calc(100vw - 32px); }
 @media (prefers-reduced-motion: reduce) { tbody tr.flash { animation: none; } }
+
+/* ---- phones and tablets: layout follows the screen size and orientation ---- */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.status-line span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 900px) {
+  .brand .sub { display: none; }
+  .search { flex: 1 1 140px; max-width: none; }
+}
+@media (max-width: 600px) {
+  .wrap { padding-block: 10px 28px; }
+  header.top { gap: 8px; margin-bottom: 10px; }
+  .brand { order: 0; }
+  .filemenu { order: 1; }
+  .viewtabs { order: 2; flex: 1 1 100%; }
+  .viewtabs button { flex: 1; padding: 8px 4px; }
+  .search { order: 3; flex: 1 1 100%; }
+  .status-line { margin-bottom: 10px; font-size: 11.5px; }
+  .status-line span:last-child { white-space: nowrap; }
+  .cli-term { padding: 12px 12px; font-size: 13px; line-height: 1.6; border-radius: 10px; }
+  .cli-bar { flex-wrap: wrap; gap: 6px; }
+}
+/* phone on its side: little height, so one header row and a taller drawing area */
+@media (max-height: 500px) and (orientation: landscape) {
+  .wrap { padding-block: 6px 20px; }
+  header.top { flex-wrap: nowrap; gap: 8px; margin-bottom: 6px; }
+  .brand .sub { display: none; }
+  .brand h1 { font-size: 17px; }
+  .search { flex: 1 1 120px; max-width: none; order: 0; }
+  .viewtabs { order: 0; flex: none; }
+  .viewtabs button { padding: 5px 9px; }
+  .filemenu { order: 0; }
+  .status-line { margin-bottom: 6px; font-size: 11px; }
+  .status-line span:last-child { white-space: nowrap; }
+  .topo-bar { padding: 6px 10px; gap: 6px 10px; }
+  .pal { min-width: 52px; padding: 2px 6px; }
+  .pal svg { width: 28px; height: 20px; }
+  #topoSvg { height: calc(100vh - 60px); height: calc(100dvh - 60px); min-height: 240px; }
+  .cliview { height: calc(100vh - 70px); height: calc(100dvh - 70px); min-height: 240px; }
+  .pt-dlg[open] { height: calc(100vh - 8px); height: calc(100dvh - 8px); }
+  .pt-mods, .pt-nav { max-height: 80px; }
+  .pt-eq-out { height: 48px; }
+}
+/* tablets (iPad) portrait: the side panel would squeeze the drawing, so it slides up from the bottom */
+@media (min-width: 601px) and (max-width: 1024px) and (orientation: portrait) {
+  #topoSvg { height: min(62vh, 760px); }
+  .cliview { height: calc(100vh - 140px); height: calc(100dvh - 140px); }
+}
+@supports (height: 100dvh) { @media (max-width: 720px) { .cliview { height: calc(100dvh - 170px); } .pt-dlg[open] { height: calc(100dvh - 16px); } } }
 </style>
 
 <div class="wrap">
