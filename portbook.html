@@ -1110,8 +1110,34 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   }
   function autoPos(all) {
     if (!all.length) return {};
-    const a = autoPosTree(all), b = autoPosCore(all);
+    const t0 = performance.now();
+    const a = polishLayout(autoPosTree(all), all, t0 + 2500), b = polishLayout(autoPosCore(all), all, t0 + 3200);
     return layoutScore(a, all) <= layoutScore(b, all) ? a : b;
+  }
+  // last pass: try nudging each device (and re-hanging single-cable devices around their parent) while the score drops
+  function polishLayout(pos, all, deadline) {
+    const GAP = 320, ROW = 320, nb = new Map(all.map(d => [d.id, []]));
+    for (const l of links()) if (nb.has(l.aDev) && nb.has(l.bDev) && l.aDev !== l.bDev) { nb.get(l.aDev).push(l.bDev); nb.get(l.bDev).push(l.aDev); }
+    let best = layoutScore(pos, all);
+    const free = (id, p) => all.every(d => d.id === id || Math.abs(pos[d.id].x - p.x) >= GAP * 0.55 || Math.abs(pos[d.id].y - p.y) >= ROW * 0.4);
+    for (let pass = 0; pass < 4 && best > 0 && performance.now() < deadline; pass++) {
+      let moved = false;
+      for (const d of all) {
+        if (performance.now() > deadline) break;
+        const cur = pos[d.id], cands = [];
+        for (const [dx, dy] of [[-.5, 0], [.5, 0], [-1, 0], [1, 0], [0, -.5], [0, .5], [0, 1], [0, -1], [-.5, .5], [.5, .5], [-.5, -.5], [.5, -.5]]) cands.push({ x: cur.x + dx * GAP, y: cur.y + dy * ROW });
+        if (nb.get(d.id).length === 1) { const pp = pos[nb.get(d.id)[0]]; for (const dx of [-1, -.5, 0, .5, 1]) for (const dy of [-1, 0, 1]) if (dx || dy) cands.push({ x: pp.x + dx * GAP, y: pp.y + dy * ROW }); }
+        for (const c of cands) {
+          if (!free(d.id, c)) continue;
+          pos[d.id] = c; const sc = layoutScore(pos, all);
+          if (sc < best - 1e-9) { best = sc; moved = true; break; }
+          pos[d.id] = cur;
+        }
+      }
+      if (!moved) break;
+    }
+    for (const id in pos) pos[id] = { x: Math.round(pos[id].x), y: Math.round(pos[id].y) };
+    return pos;
   }
   function autoPosTree(all) {
     // devices with a single cable (PCs, servers, a lone router) hang right under the device they plug into;
