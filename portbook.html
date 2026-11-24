@@ -642,7 +642,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     <div class="filemenu">
       <button class="btn" id="fileBtn" type="button" aria-haspopup="menu" aria-expanded="false">파일 ▾</button>
       <div class="fmenu" id="fileMenu" role="menu" hidden>
-        <button type="button" role="menuitem" data-file="save"><b>파일로 저장</b><small>장비·포트·케이블·배치 전체 (.json)</small></button>
+        <button type="button" role="menuitem" data-file="save"><b>파일로 저장</b><small>내 기기에 .json으로 저장 (장비·포트·케이블·배치 전체)</small></button>
         <button type="button" role="menuitem" data-file="load"><b>파일 불러오기</b><small>저장해 둔 .json 파일로 바꾸기</small></button>
         <button type="button" role="menuitem" data-file="load"><b>Packet Tracer 파일 불러오기</b><small>.pkt / .pka 그대로 장비·포트·IP·케이블 그리기</small></button>
         <button type="button" role="menuitem" data-file="csv"><b>CSV 내보내기</b><small>엑셀에서 여는 인터페이스 표</small></button>
@@ -3184,11 +3184,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     }
     const csv = "﻿" + lines.map(l => l.map(v => { v = String(v ?? ""); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(",")).join("\r\n");
     if (lines.length === 1) { toast("내보낼 인터페이스가 없습니다."); return; }
-    let dl = null; try { dl = await window.claude?.use?.("downloads"); } catch (e) {}
-    const stamp = new Date().toISOString().slice(0, 10);
-    if (dl) { try { await dl.save({ filename: `portbook-${stamp}.csv`, data: csv }); return; } catch (e) { if (e?.code && /declin|cancel|dismiss/i.test(e.code)) return; } }
-    try { await navigator.clipboard.writeText(csv); toast("파일 저장을 쓸 수 없어 CSV를 클립보드에 복사했습니다."); }
-    catch (e) { toast("이 화면에서는 내보내기를 쓸 수 없습니다."); }
+    await saveFile(csv, `portbook-${new Date().toISOString().slice(0, 10)}.csv`);
   }
 
   // ---------- file: save / load / reset ----------
@@ -3200,6 +3196,21 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       try { await dl.save({ filename, data: text }); toast(`${filename} 파일로 저장했습니다.`); return true; }
       catch (e) { if (e?.code && /declin|cancel|dismiss|not_granted/i.test(e.code)) { toast("저장을 취소했습니다."); return false; } }
     }
+    // outside Claude (GitHub Pages, a downloaded copy): the browser's own save
+    const type = /\.csv$/i.test(filename) ? "text/csv" : "application/json";
+    if (window.showSaveFilePicker && !/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {   // Chrome/Edge on a computer: pick the folder
+      try {
+        const h = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: type === "text/csv" ? "CSV" : "포트북 파일", accept: { [type]: ["." + filename.split(".").pop()] } }] });
+        const w = await h.createWritable(); await w.write(new Blob([text], { type })); await w.close();
+        toast(`${h.name || filename} 파일로 저장했습니다.`); return true;
+      } catch (e) { if (e?.name === "AbortError") { toast("저장을 취소했습니다."); return false; } }
+    }
+    try {   // everything else: a normal download (iPhone/iPad: 파일 앱 › 다운로드, Android/PC: 다운로드 폴더)
+      const url = URL.createObjectURL(new Blob([text], { type })), a = document.createElement("a");
+      a.href = url; a.download = filename; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      toast(`${filename} 파일을 다운로드 폴더에 저장했습니다.`); return true;
+    } catch (e) {}
     try { await navigator.clipboard.writeText(text); toast("이 화면에서는 파일 저장을 쓸 수 없어 내용을 클립보드에 복사했습니다. 메모장에 붙여 .json으로 저장하세요."); return true; }
     catch (e) { toast("이 화면에서는 파일로 저장할 수 없습니다."); return false; }
   }
