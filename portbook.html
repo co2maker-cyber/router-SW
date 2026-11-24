@@ -1089,8 +1089,68 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   let drag = null, lastVB = null;
   // Auto layout: device kinds in rows (routers, L3 switches, switches, hosts), then the order inside each row is
   // searched so cables cross as little as possible and no cable runs over a device it does not connect to.
-  function autoPos(devs) {
-    const GAP = 320, ROW = 270, pos = {};
+  // how messy a layout is: crossings, cables over devices or over other cables' info boxes, boxes on top of each other
+  function layoutScore(pos, devs) {
+    const ids = new Set(devs.map(d => d.id)), seen = new Set(), E = [];
+    for (const l of links()) { if (!ids.has(l.aDev) || !ids.has(l.bDev) || l.aDev === l.bDev) continue; const k = [l.aDev, l.bDev].sort().join("|"); if (seen.has(k)) continue; seen.add(k); E.push([l.aDev, l.bDev, pos[l.aDev], pos[l.bDev]]); }
+    const d3 = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    const cross = (p1, p2, p3, p4) => { const a = d3(p3, p4, p1), b = d3(p3, p4, p2), c = d3(p1, p2, p3), d = d3(p1, p2, p4); return a && b && c && d && ((a > 0) !== (b > 0)) && ((c > 0) !== (d > 0)); };
+    const segDist = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, L = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / L)); return Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy); };
+    const segRect = (a, b, x1, y1, x2, y2) => { if (Math.max(a.x, b.x) < x1 || Math.min(a.x, b.x) > x2 || Math.max(a.y, b.y) < y1 || Math.min(a.y, b.y) > y2) return false; const inR = p => p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2; if (inR(a) || inR(b)) return true; const C = [{ x: x1, y: y1 }, { x: x2, y: y1 }, { x: x2, y: y2 }, { x: x1, y: y2 }]; return C.some((p, k) => cross(a, b, p, C[(k + 1) % 4])); };
+    let c = 0;
+    for (let i = 0; i < E.length; i++) for (let j = i + 1; j < E.length; j++) { const [a, b, p, q] = E[i], [e, f, r, t] = E[j]; if (a === e || a === f || b === e || b === f) continue; if (cross(p, q, r, t)) c += 40; }
+    for (const [a, b, p, q] of E) for (const d of devs) { if (d.id === a || d.id === b) continue; if (segDist(pos[d.id], p, q) < 60) c += 25; }
+    const M = E.map(([, , p, q]) => { const t = Math.abs(q.y - p.y) > 60 ? (q.y > p.y ? 0.62 : 0.38) : 0.5; return { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }; }), bw = 95 * (state.boxScale || 1), bh = 68 * (state.boxScale || 1);
+    for (let i = 0; i < M.length; i++) {
+      for (let j = i + 1; j < M.length; j++) if (Math.abs(M[i].x - M[j].x) < bw * 2 && Math.abs(M[i].y - M[j].y) < bh * 2) c += 12;
+      for (const d of devs) { const q = pos[d.id]; if (Math.abs(M[i].x - q.x) < bw + 40 && Math.abs(M[i].y - q.y) < bh + 35) c += 12; }
+      for (let j = 0; j < E.length; j++) if (j !== i && segRect(E[j][2], E[j][3], M[i].x - bw, M[i].y - bh, M[i].x + bw, M[i].y + bh)) c += 40;
+    }
+    return c;
+  }
+  function autoPos(all) {
+    if (!all.length) return {};
+    const a = autoPosTree(all), b = autoPosCore(all);
+    return layoutScore(a, all) <= layoutScore(b, all) ? a : b;
+  }
+  function autoPosTree(all) {
+    // devices with a single cable (PCs, servers, a lone router) hang right under the device they plug into;
+    // the rest are laid out by row search, then the leaves are spread under their parent
+    const GAP = 320, ROW = 320;
+    const ids = new Set(all.map(d => d.id)), deg = new Map(all.map(d => [d.id, new Set()]));
+    for (const l of links()) if (ids.has(l.aDev) && ids.has(l.bDev) && l.aDev !== l.bDev) { deg.get(l.aDev).add(l.bDev); deg.get(l.bDev).add(l.aDev); }
+    const rank = { router: 0, firewall: 0, l3switch: 1, switch: 2, other: 3 };
+    const leaf = new Map();
+    for (const d of all) { if (deg.get(d.id).size !== 1) continue; const par = [...deg.get(d.id)][0], pd = all.find(x => x.id === par); if (deg.get(par).size > 1 && (rank[d.kind] ?? 3) >= (rank[pd.kind] ?? 3)) leaf.set(d.id, par); }
+    const lone = all.filter(d => !deg.get(d.id).size), core = all.filter(d => !leaf.has(d.id) && deg.get(d.id).size);
+    if (!core.length) return autoPosCore(all);
+    const pos = autoPosCore(core);
+    const groups = new Map(); for (const [id, par] of leaf) { if (!groups.has(par)) groups.set(par, []); groups.get(par).push(id); }
+    const want = [];
+    for (const [par, kids] of groups) { kids.sort((a, b) => natCmp(all.find(x => x.id === a).name, all.find(x => x.id === b).name)); kids.forEach((id, i) => want.push({ id, par, i, x: pos[par].x + (i - (kids.length - 1) / 2) * GAP, y: pos[par].y + ROW })); }
+    // one level at a time: keep each group together and in parent order, push apart to GAP,
+    // and step around devices already standing on that level (they do not move)
+    for (const y of [...new Set(want.map(w => w.y))]) {
+      const row = want.filter(w => w.y === y).sort((a, b) => pos[a.par].x - pos[b.par].x || a.i - b.i);
+      for (let i = 1; i < row.length; i++) row[i].x = Math.max(row[i].x, row[i - 1].x + GAP);
+      const shift = row.reduce((a, w) => a + (pos[w.par].x - w.x), 0) / row.length; row.forEach(w => { w.x += shift; });
+      const fixed = Object.entries(pos).filter(([id, p]) => !leaf.has(id) && Math.abs(p.y - y) < ROW * 0.4).map(([, p]) => ({ x: p.x, fixed: true }));
+      const items = [];   // merge the fixed devices into the leaf sequence by position, leaves keep their own order
+      let k = 0; const fx = fixed.sort((a, b) => a.x - b.x);
+      for (const w of row) { while (k < fx.length && fx[k].x <= w.x) items.push(fx[k++]); items.push(w); }
+      while (k < fx.length) items.push(fx[k++]);
+      let last = -Infinity; for (const it of items) { if (it.fixed) last = it.x; else { it.x = Math.max(it.x, last + GAP); last = it.x; } }
+      let next = Infinity; for (let i = items.length - 1; i >= 0; i--) { const it = items[i]; if (it.fixed) next = it.x; else if (it.x > next - GAP) { it.x = next - GAP; next = it.x; } else next = it.x; }
+      // still squeezed between two devices: drop half a level
+      row.forEach(w => { pos[w.id] = { x: Math.round(w.x), y: Math.round(fx.some(p => Math.abs(p.x - w.x) < GAP * 0.8) ? y + ROW * 0.5 : y) }; });
+    }
+    // devices with no cable: a column at the right, clear of everything
+    const P = Object.values(pos), right = Math.max(...P.map(p => p.x)) + GAP, top = Math.min(...P.map(p => p.y));
+    lone.forEach((d, i) => { pos[d.id] = { x: right, y: top + i * ROW * 0.6 }; });
+    return pos;
+  }
+  function autoPosCore(devs) {
+    const GAP = 320, ROW = 320, pos = {};
     if (!devs.length) return pos;
     const tierOf = { router: 0, firewall: 0, l3switch: 1, switch: 2, other: 3 }, ids = new Set(devs.map(d => d.id));
     const edges = []; const seen = new Set();
@@ -1112,36 +1172,64 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     const yoff = new Map(), P = id => ({ x: xs.get(id), y: rowOf.get(id) * ROW + (yoff.get(id) || 0) });
     const cross = (p1, p2, p3, p4) => { const d = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); const d1 = d(p3, p4, p1), d2 = d(p3, p4, p2), d3 = d(p1, p2, p3), d4 = d(p1, p2, p4); return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0)) && d1 && d2 && d3 && d4; };
     const segDist = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, L = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / L)); return Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy); };
+    const segRect = (a, b, x1, y1, x2, y2) => {   // does segment a-b touch the rectangle?
+      if (Math.max(a.x, b.x) < x1 || Math.min(a.x, b.x) > x2 || Math.max(a.y, b.y) < y1 || Math.min(a.y, b.y) > y2) return false;
+      const inR = p => p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2; if (inR(a) || inR(b)) return true;
+      const C = [{ x: x1, y: y1 }, { x: x2, y: y1 }, { x: x2, y: y2 }, { x: x1, y: y2 }];
+      return C.some((p, k) => cross(a, b, p, C[(k + 1) % 4]));
+    };
     const cost = () => {
       let c = 0; const E = edges.map(([a, b]) => [a, b, P(a), P(b)]);
-      for (let i = 0; i < E.length; i++) for (let j = i + 1; j < E.length; j++) { const [a, b, p, q] = E[i], [c2, d2, r, t] = E[j]; if (a === c2 || a === d2 || b === c2 || b === d2) continue; if (cross(p, q, r, t)) c += 10; }
-      for (const [a, b, p, q] of E) { for (const d of devs) { if (d.id === a || d.id === b) continue; if (segDist(P(d.id), p, q) < 60) c += 25; } c += Math.abs(p.x - q.x) / GAP * 0.6; }
+      for (let i = 0; i < E.length; i++) for (let j = i + 1; j < E.length; j++) { const [a, b, p, q] = E[i], [c2, d2, r, t] = E[j]; if (a === c2 || a === d2 || b === c2 || b === d2) continue; if (cross(p, q, r, t)) c += 40; }
+      for (const [a, b, p, q] of E) { for (const d of devs) { if (d.id === a || d.id === b) continue; if (segDist(P(d.id), p, q) < 60) c += 25; } c += Math.abs(p.x - q.x) / GAP * 2; }
       // the info boxes sit at the middle of each cable: keep them apart and off the devices
-      const M = E.map(([, , p, q]) => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }));
-      for (let i = 0; i < M.length; i++) { for (let j = i + 1; j < M.length; j++) if (Math.abs(M[i].x - M[j].x) < 165 && Math.abs(M[i].y - M[j].y) < 120) c += 6; for (const d of devs) { const q = P(d.id); if (Math.abs(M[i].x - q.x) < 110 && Math.abs(M[i].y - q.y) < 85) c += 6; } }
+      const M = E.map(([, , p, q]) => { const t = Math.abs(q.y - p.y) > 60 ? (q.y > p.y ? 0.62 : 0.38) : 0.5; return { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }; }), bw = 95 * (state.boxScale || 1), bh = 68 * (state.boxScale || 1);
+      for (let i = 0; i < M.length; i++) {
+        for (let j = i + 1; j < M.length; j++) if (Math.abs(M[i].x - M[j].x) < bw * 2 && Math.abs(M[i].y - M[j].y) < bh * 2) c += 12;
+        for (const d of devs) { const q = P(d.id); if (Math.abs(M[i].x - q.x) < bw + 40 && Math.abs(M[i].y - q.y) < bh + 35) c += 12; }
+        // another cable running through this cable's info box
+        for (let j = 0; j < E.length; j++) { if (j === i) continue; if (segRect(E[j][2], E[j][3], M[i].x - bw, M[i].y - bh, M[i].x + bw, M[i].y + bh)) c += 40; }
+      }
+      for (const v of yoff.values()) if (v) c += 4;   // rows kept straight when it costs nothing else
       return c;
     };
-    // local search: swap any two devices in a row while it lowers the cost
+    // local search: reorder rows / step devices half a row while it lowers the cost; a few restarts from shuffled orders
     let best = cost();
     const perms = a => a.length <= 1 ? [a] : a.flatMap((x, i) => perms([...a.slice(0, i), ...a.slice(i + 1)]).map(r => [x, ...r]));
-    const t0 = performance.now();
-    for (let pass = 0; pass < 25 && performance.now() - t0 < 1500; pass++) {
-      let improved = false;
-      for (const r of rows) {
-        if (r.length > 1 && r.length <= 6) {   // small row: try every order
-          let keep = [...r];
-          for (const o of perms([...r])) { r.splice(0, r.length, ...o); place(); const c = cost(); if (c < best - 1e-9) { best = c; keep = [...o]; improved = true; } }
-          r.splice(0, r.length, ...keep); place();
-          continue;
+    const search = deadline => {
+      for (let pass = 0; pass < 25 && performance.now() < deadline; pass++) {
+        let improved = false;
+        for (const r of rows) {
+          if (r.length > 1 && r.length <= 6) {   // small row: try every order
+            let keep = [...r];
+            for (const o of perms([...r])) { r.splice(0, r.length, ...o); place(); const c = cost(); if (c < best - 1e-9) { best = c; keep = [...o]; improved = true; } }
+            r.splice(0, r.length, ...keep); place();
+            continue;
+          }
+          for (let i = 0; i < r.length; i++) for (let j = 0; j < r.length; j++) {   // big row: move one device to another spot
+            if (i === j) continue;
+            const keep = [...r], [m] = r.splice(i, 1); r.splice(j, 0, m); place(); const c = cost();
+            if (c < best - 1e-9) { best = c; improved = true; } else { r.splice(0, r.length, ...keep); place(); }
+          }
         }
-        for (let i = 0; i < r.length; i++) for (let j = 0; j < r.length; j++) {   // big row: move one device to another spot
-          if (i === j) continue;
-          const keep = [...r], [m] = r.splice(i, 1); r.splice(j, 0, m); place(); const c = cost();
-          if (c < best - 1e-9) { best = c; improved = true; } else { r.splice(0, r.length, ...keep); place(); }
+        // a device that cannot sit in line with its row (three devices of one row joined together): half a row up or down
+        for (const d of devs) {
+          const was = yoff.get(d.id) || 0;
+          for (const off of [0, -0.5 * ROW, 0.5 * ROW]) { if (off === was) continue; yoff.set(d.id, off); const c = cost(); if (c < best - 5) { best = c; improved = true; break; } yoff.set(d.id, was); }
         }
+        if (!improved) break;
       }
-      if (!improved) break;
+    };
+    const t0 = performance.now(), deadline = t0 + 2000;
+    search(deadline);
+    let top = { c: best, rows: rows.map(r => [...r]), yoff: new Map(yoff) };
+    let seed = 12345 + devs.length * 7; const rnd = () => (seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296;
+    for (let k = 0; k < 16 && top.c > 0.5 && performance.now() < deadline; k++) {
+      rows.forEach(r => { for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } });
+      yoff.clear(); place(); best = cost(); search(deadline);
+      if (best < top.c - 1e-9) top = { c: best, rows: rows.map(r => [...r]), yoff: new Map(yoff) };
     }
+    rows.forEach((r, i) => r.splice(0, r.length, ...top.rows[i])); yoff.clear(); top.yoff.forEach((v, k2) => yoff.set(k2, v)); place(); best = top.c;
     // straighten: pull each device toward its neighbours, keeping the row order and spacing
     for (let it = 0; it < 8; it++) {
       const snapshot = new Map(xs);
@@ -1153,16 +1241,6 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
         r.forEach((id, i) => xs.set(id, out[i] + shift));
       }
       const c = cost(); if (c <= best + 1e-9) best = c; else { snapshot.forEach((v, k) => xs.set(k, v)); break; }
-    }
-    // what a row order cannot fix (three devices of one row joined in a triangle): step a device half a row up or down
-    for (let pass = 0; pass < 3; pass++) {
-      let moved = false;
-      for (const d of devs) for (const off of [-0.45 * ROW, 0.45 * ROW]) {
-        const was = yoff.get(d.id) || 0; if (was) continue;
-        yoff.set(d.id, off); const c = cost();
-        if (c < best - 1e-9) { best = c; moved = true; break; } else yoff.set(d.id, was);
-      }
-      if (!moved) break;
     }
     rows.forEach((r, ri) => r.forEach(id => { pos[id] = { x: Math.round(xs.get(id)), y: Math.round(ri * ROW + (yoff.get(id) || 0)) }; }));
     return pos;
@@ -1329,7 +1407,8 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       const cab = l.a.cable || l.b?.cable || null, ck = cab?.kind || "unknown";
       const fcol = ck === "fiber" ? (FO[cab.grade]?.color || "#1fb3c4") : "";
       linksSvg += `<path class="link ${ck} st-${linkState(l.a, l.b)}" ${fcol ? `style="stroke:${fcol}"` : ""} d="M${p1.x},${p1.y} Q${c.x},${c.y} ${p2.x},${p2.y}"><title>${esc(l.a.name)} ↔ ${esc(l.b ? l.b.name : devName(l.bDev))}${cab ? " · " + esc(cableLong(cab)) : ""}</title></path>`;
-      const mid = q(0.5);
+      // info box: on a cable going down, nearer the lower device, so boxes fanning out of one switch spread apart
+      const mid = q(Math.abs(dy) > 60 ? (dy > 0 ? 0.62 : 0.38) : 0.5);
 
       linksSvg += `<path class="link-hit" data-a="${esc(l.a.id)}" d="M${p1.x},${p1.y} Q${c.x},${c.y} ${p2.x},${p2.y}"/>`;
       const td = Math.min(0.3, 42 * state.iconScale / len), tl = Math.min(0.44, 118 / len);
