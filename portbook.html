@@ -621,6 +621,19 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   .cliview { height: calc(100vh - 140px); height: calc(100dvh - 140px); }
 }
 @supports (height: 100dvh) { @media (max-width: 720px) { .cliview { height: calc(100dvh - 170px); } .pt-dlg[open] { height: calc(100dvh - 16px); } } }
+
+/* on-screen keys for touch screens (phones and iPads have no Tab or arrow keys) */
+.cli-keys { display: none; gap: 6px; flex-wrap: wrap; }
+.cli-keys button { flex: 1 1 0; min-width: 52px; min-height: 42px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); font: 600 14px var(--font-mono); cursor: pointer; }
+.cli-keys button:active { background: var(--accent-soft); border-color: var(--accent); }
+.cli-keys .ck-enter { flex: 1.6 1 0; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+@media (pointer: coarse), (hover: none) { .cli-keys { display: flex; } }
+@media (max-width: 600px) { .cli-keys { gap: 4px; } .cli-keys button { min-width: 0; padding: 0 2px; font-size: 13px; } }
+.save-btn { font-weight: 600; }
+@media (max-width: 600px) { .save-btn { order: 1; } .save-btn .lbl-long { display: none; } }
+@media (min-width: 601px) { .save-btn .lbl-short { display: none; } }
+@media (max-height: 500px) and (orientation: landscape) { .save-btn .lbl-long { display: none; } .save-btn .lbl-short { display: inline; } }
+@media (min-width: 601px) and (max-width: 900px) { .save-btn .lbl-long { display: none; } .save-btn .lbl-short { display: inline; } }
 </style>
 
 <div class="wrap">
@@ -639,6 +652,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       <button type="button" role="tab" data-view="list" aria-selected="false">목록</button>
       <button type="button" role="tab" data-view="cli" aria-selected="false">CLI</button>
     </div>
+    <button class="btn save-btn" id="saveBtn" type="button" title="지금 설계를 내 기기에 .json 파일로 내려받기">⬇ <span class="lbl-long">파일로 다운로드</span><span class="lbl-short">다운로드</span></button>
     <div class="filemenu">
       <button class="btn" id="fileBtn" type="button" aria-haspopup="menu" aria-expanded="false">파일 ▾</button>
       <div class="fmenu" id="fileMenu" role="menu" hidden>
@@ -671,6 +685,9 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       <div class="cli-term" id="cliTerm">
         <div class="cli-out" id="cliOut" role="log" aria-live="polite"></div>
         <div class="cli-cur"><span class="cli-prompt" id="cliPrompt">&gt;</span><input id="cliIn" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="IOS 명령 입력" enterkeyhint="send"></div>
+      </div>
+      <div class="cli-keys" id="cliKeys" role="toolbar" aria-label="특수 키">
+        <button type="button" data-ck="Tab">Tab</button><button type="button" data-ck="?">?</button><button type="button" data-ck="ArrowUp" aria-label="이전 명령">↑</button><button type="button" data-ck="ArrowDown" aria-label="다음 명령">↓</button><button type="button" data-ck="ctrlz">Ctrl+Z</button><button type="button" data-ck="Enter" class="ck-enter">Enter</button>
       </div>
     </div>
   </section>
@@ -3239,6 +3256,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     $("#resetDlg").showModal();
   }
   $("#resetSave").addEventListener("click", () => saveProject());
+  $("#saveBtn").addEventListener("click", () => saveProject());
   $("#resetGo").addEventListener("click", async () => {
     $("#resetDlg").close();
     try { await wipeAll(); afterBulk(); toast("초기화했습니다. 빈 캔버스에서 다시 시작합니다."); } catch (e) { writeErr(e); }
@@ -4106,6 +4124,16 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     } else if (e.key === "ArrowUp") { e.preventDefault(); if (cli.hp > 0) inp.value = cli.hist[--cli.hp]; }
     else if (e.key === "ArrowDown") { e.preventDefault(); if (cli.hp < cli.hist.length - 1) inp.value = cli.hist[++cli.hp]; else { cli.hp = cli.hist.length; inp.value = ""; } }
     else if (e.key === "z" && e.ctrlKey) { e.preventDefault(); if (cli.mode.startsWith("config")) { cliOut(cliPrompt() + "^Z", "cli-cmd"); cli.mode = "priv"; cli.ifId = null; cliSync(); } }
+  });
+  // on-screen keys: act on the input without taking focus away (the phone keyboard stays up)
+  $("#cliKeys").addEventListener("pointerdown", e => { if (e.target.closest("[data-ck]")) e.preventDefault(); });
+  $("#cliKeys").addEventListener("click", e => {
+    const b = e.target.closest("[data-ck]"); if (!b) return; const inp = $("#cliIn"), k = b.dataset.ck;
+    const key = (key, extra = {}) => inp.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...extra }));
+    if (k === "?") { inp.value += "?"; key("Enter"); }
+    else if (k === "ctrlz") key("z", { ctrlKey: true });
+    else key(k);
+    if (document.activeElement !== inp) inp.focus({ preventScroll: true });
   });
   // pasting several lines runs them one by one, like pasting into a console
   $("#cliIn").addEventListener("paste", async e => {
