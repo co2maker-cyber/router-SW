@@ -388,6 +388,10 @@ dialog form { display: flex; flex-direction: column; }
 .fmenu button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 9px 12px; border: 0; background: transparent; border-radius: 6px; cursor: pointer; text-align: left; }
 .fmenu button:hover, .fmenu button:focus-visible { background: var(--sunk); }
 .fmenu small { color: var(--muted); font-size: 12px; }
+.automenu { position: relative; }
+.automenu .fmenu { width: 250px; }
+.fmenu button[aria-checked="true"] { background: var(--accent-soft); }
+.fmenu button[aria-checked="true"] b::after { content: " ✓"; color: var(--accent); }
 .fmenu .danger { border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; margin-top: 2px; }
 .fmenu .danger b { color: var(--down); }
 .rackview { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
@@ -658,6 +662,28 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
 .plan-dims .pd-pre { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .plan-dims .pd-pre button { padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); cursor: pointer; font: 12px var(--font-mono); color: var(--fg); }
 .plan-dims .pd-pre button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.plan-dims .pd-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.plan-dims .pd-seg button { padding: 4px 10px; border: 0; background: var(--bg); color: var(--fg); cursor: pointer; font-size: 13px; }
+.plan-dims .pd-seg button + button { border-left: 1px solid var(--line); }
+.plan-dims .pd-seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.plan-dims #pd_len { width: 76px; }
+#planSvg .pl-hit { fill: none; stroke: transparent; pointer-events: stroke; }
+#planSvg .pl-wall.pl-sel .pl-body { stroke-width: 40; }
+#planSvg .pl-vtx { fill: var(--panel); stroke: #f0a500; cursor: grab; }
+#planSvg .pl-vtx.on { fill: #f0a500; }
+#planSvg .pl-mid { fill: var(--panel); stroke: #f0a500; cursor: copy; }
+#planSvg .pl-midx { stroke: #f0a500; pointer-events: none; }
+#planSvg .pl-draft { fill: var(--fg); fill-opacity: .55; pointer-events: none; }
+#planSvg .pl-draftpt { fill: var(--accent); pointer-events: none; }
+#planSvg .pl-rubber { stroke: var(--accent); stroke-opacity: .35; pointer-events: none; }
+#planSvg .pl-rubline { stroke: var(--accent); stroke-dasharray: 90 60; pointer-events: none; }
+#planSvg .pl-draftlbl { fill: var(--accent); }
+.pl-vt { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pl-vt th { text-align: left; color: var(--muted); font-weight: 600; padding: 3px 2px; }
+.pl-vt td { padding: 2px; border-top: 1px solid var(--line); }
+.pl-vt tr.on td { background: var(--warn-soft); }
+.pl-vt input { width: 70px; padding: 4px 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--fg); font: 13px var(--font-mono); }
+.pl-vt button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font: 12px var(--font-mono); padding: 2px 4px; }
 .plan-body { display: grid; grid-template-columns: minmax(0, 1fr) 320px; }
 .plan-body[hidden] { display: none; }
 .plan-canvas { position: relative; min-width: 0; background: var(--bg); }
@@ -846,7 +872,13 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     <div class="topo-bar">
       <div class="palette" id="palette" aria-label="장비 팔레트"></div>
       <span class="donechip" id="doneChip" title="체크한 장비 수 / 전체 장비 수">설정 완료 <b>0/0</b></span>
-      <button class="btn sm" type="button" id="autoBtn">자동 배치</button>
+      <div class="filemenu automenu">
+        <button class="btn sm" type="button" id="autoBtn" aria-haspopup="menu" aria-expanded="false">자동 배치 ▾</button>
+        <div class="fmenu" id="autoMenu" role="menu" hidden>
+          <button type="button" role="menuitem" data-auto="pyramid"><b>▲ 피라미드</b><small>꼭대기 장비부터 층별로 가운데 정렬</small></button>
+          <button type="button" role="menuitem" data-auto="cross"><b>⇄ 교차 최소</b><small>케이블이 덜 겹치는 자유 배치</small></button>
+        </div>
+      </div>
       <button class="btn sm danger" type="button" id="resetBtn">초기화</button>
     </div>
     <div class="topo-body" id="topoBody">
@@ -1255,27 +1287,36 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     room: { a: "가로", b: "세로", u: "m" }
   };
   const pdimOf = t => PDIM[t] || { a: "가로", b: "세로", u: "mm" };
-  PL.dims = {};
+  PL.dims = {}; PL.wallMode = "straight"; PL.wallAng = 90; PL.draft = null; PL.nextLen = null; PL.vsel = -1;
+  try { PL.wallMode = localStorage.getItem("portbook.wallMode") || "straight"; PL.wallAng = +(localStorage.getItem("portbook.wallAng") ?? 90); } catch (e) {}
   try { PL.dims = JSON.parse(localStorage.getItem("portbook.pdims") || "{}") || {}; } catch (e) {}
   const toolSize = t => ({ w: +PL.dims[t]?.w || PTYPES[t].w, d: +PL.dims[t]?.d || PTYPES[t].d });
   function renderPlanDims() {
     const bar = $("#planDims"), t = PL.tool;
     if (!PTYPES[t] || t === "rack") { bar.hidden = true; bar.innerHTML = ""; bar.dataset.tool = ""; return; }
     const D = pdimOf(t), { w, d } = toolSize(t), k = D.u === "m" ? 1000 : 1, fmt = v => String(Math.round(v / k * 1000) / 1000);
-    if (bar.dataset.tool === t && !bar.hidden && bar.firstChild) {   // same tool: update in place so a click in progress still lands
+    const poly = t === "wall" && PL.wallMode === "poly", key = t + (t === "wall" ? PL.wallMode + PL.wallAng : "");
+    if (bar.dataset.tool === key && !bar.hidden && bar.firstChild) {   // same tool: update in place so a click in progress still lands
+      const n = PL.draft?.pts.length || 0, u = $("#pd_undo"), dn = $("#pd_done"), ln = $("#pd_len");
+      if (u) u.disabled = !n; if (dn) dn.disabled = n < 2; if (ln && ln !== document.activeElement) ln.value = PL.nextLen ? String(PL.nextLen) : "";
       for (const [id, v] of [["#pd_w", w], ["#pd_d", d]]) { const el = $(id); if (el && el !== document.activeElement) el.value = fmt(v); }
       bar.querySelectorAll("[data-pdpre]").forEach(x => { const o = Object.fromEntries(x.dataset.pdpre.split(",").map(y => y.split(":"))); x.setAttribute("aria-pressed", String((o.w == null || +o.w === w) && (o.d == null || +o.d === d))); });
-      const n = bar.querySelector(".pl-note"); if (n) n.textContent = `${t === "room" ? `= ${Math.round(w * d / 1e5) / 10} m² · ` : ""}이 치수로 놓입니다`;
+      const nt = bar.querySelector(".pl-note"); if (nt) nt.textContent = poly ? (n ? `점 ${n}개 · 총 ${mm(polyLen(PL.draft.pts, false))}` : "첫 점을 누르세요") : `${t === "room" ? `= ${Math.round(w * d / 1e5) / 10} m² · ` : ""}이 치수로 놓입니다`;
       return;
     }
     let pre = "";
     if (D.pre?.b) pre = `<span class="pd-pre" aria-label="${D.b} 빠른 선택">${D.pre.b.map(([v, l]) => `<button type="button" data-pdpre="d:${v}" aria-pressed="${d === v}">${l}</button>`).join("")}</span>`;
     if (D.pre?.ab) pre = `<span class="pd-pre" aria-label="빠른 선택">${D.pre.ab.map(([a, b]) => `<button type="button" data-pdpre="w:${a},d:${b}" aria-pressed="${w === a && d === b}">${a}×${b}</button>`).join("")}</span>`;
-    bar.dataset.tool = t; bar.hidden = false;
+    bar.dataset.tool = key; bar.hidden = false;
+    const n = PL.draft?.pts.length || 0;
     bar.innerHTML = `<b>${esc(PTYPES[t].label)} 치수</b>`
-      + `<label>${D.a} <input id="pd_w" inputmode="decimal" value="${fmt(w)}"> ${D.u}</label>`
+      + (t === "wall" ? `<span class="pd-seg" role="group" aria-label="벽 모양"><button type="button" data-pdmode="straight" aria-pressed="${!poly}">곧은 벽</button><button type="button" data-pdmode="poly" aria-pressed="${poly}">꺾인 벽</button></span>` : "")
+      + (poly ? "" : `<label>${D.a} <input id="pd_w" inputmode="decimal" value="${fmt(w)}"> ${D.u}</label>`)
       + `<label>${D.b} <input id="pd_d" inputmode="decimal" value="${fmt(d)}"> ${D.u}</label>` + pre
-      + `<span class="pl-note">${t === "room" ? `= ${Math.round(w * d / 1e5) / 10} m² · ` : ""}이 치수로 놓입니다</span>`;
+      + (poly ? `<label>각도 <span class="pd-seg">${[[90, "90°"], [45, "45°"], [0, "자유"]].map(([v, l]) => `<button type="button" data-pdang="${v}" aria-pressed="${PL.wallAng === v}">${l}</button>`).join("")}</span></label>`
+        + `<label>다음 길이 <input id="pd_len" inputmode="decimal" placeholder="자유" value="${PL.nextLen || ""}"> mm</label>`
+        + `<button type="button" class="btn sm" id="pd_undo" data-pdact="undo"${n ? "" : " disabled"}>↶ 점 하나 취소</button><button type="button" class="btn sm primary" id="pd_done" data-pdact="done"${n >= 2 ? "" : " disabled"}>✓ 완료</button>` : "")
+      + `<span class="pl-note">${poly ? (n ? `점 ${n}개 · 총 ${mm(polyLen(PL.draft.pts, false))}` : "첫 점을 누르세요") : `${t === "room" ? `= ${Math.round(w * d / 1e5) / 10} m² · ` : ""}이 치수로 놓입니다`}</span>`;
   }
   function setToolDim(t, patch) {
     PL.dims[t] = { ...toolSize(t), ...patch };
@@ -1290,12 +1331,54 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   function planItems(fid) {
     return [
       ...state.racks.filter(r => r.floorId === fid && Number.isFinite(r.px)).map(r => ({ col: "racks", id: r.id, type: "rack", name: r.name, x: r.px, y: r.py, w: r.fw || 600, d: r.fd || 1200, rot: r.rot || 0, doc: r })),
-      ...state.planobjs.filter(o => o.floorId === fid && PTYPES[o.type]).map(o => ({ col: "planobjs", id: o.id, type: o.type, name: o.name || "", x: o.x, y: o.y, w: o.w, d: o.d, rot: o.rot || 0, doc: o }))
+      ...state.planobjs.filter(o => o.floorId === fid && PTYPES[o.type]).map(o => ({ col: "planobjs", id: o.id, type: o.type, name: o.name || "", x: o.x, y: o.y, w: o.w, d: o.d, rot: o.rot || 0, doc: o, ...(Array.isArray(o.pts) && o.pts.length > 1 ? { pts: o.pts, closed: !!o.closed, rot: 0 } : {}) }))
     ];
   }
   const keyOf = it => it.col + ":" + it.id;
   const dims = it => (it.rot % 180 ? { W: it.d, D: it.w } : { W: it.w, D: it.d });
-  const bbox = it => { const { W, D } = dims(it); return { x1: it.x - W / 2, y1: it.y - D / 2, x2: it.x + W / 2, y2: it.y + D / 2 }; };
+  const bbox = it => {
+    if (it.pts) { const h = (it.d || 200) / 2, xs = it.pts.map(p => it.x + p[0]), ys = it.pts.map(p => it.y + p[1]); return { x1: Math.min(...xs) - h, y1: Math.min(...ys) - h, x2: Math.max(...xs) + h, y2: Math.max(...ys) + h }; }
+    const { W, D } = dims(it); return { x1: it.x - W / 2, y1: it.y - D / 2, x2: it.x + W / 2, y2: it.y + D / 2 };
+  };
+  // ---- bent walls: a wall with "pts" (vertices relative to x, y) and an optional "closed" ring
+  const polyLen = (pts, closed) => { let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (closed && pts.length > 2) L += Math.hypot(pts[0][0] - pts.at(-1)[0], pts[0][1] - pts.at(-1)[1]); return L; };
+  const absPts = it => it.pts.map(p => [it.x + p[0], it.y + p[1]]);
+  const wallSegs = it => { const P = absPts(it), S = []; for (let i = 1; i < P.length; i++) S.push([P[i - 1], P[i]]); if (it.closed && P.length > 2) S.push([P.at(-1), P[0]]); return S; };
+  // from absolute vertices: centre on the middle of the vertices, store them relative to it
+  function normWall(P, closed) {
+    const Q = P.filter((p, i) => !i || Math.hypot(p[0] - P[i - 1][0], p[1] - P[i - 1][1]) > 1);
+    if (closed && Q.length > 2 && Math.hypot(Q[0][0] - Q.at(-1)[0], Q[0][1] - Q.at(-1)[1]) <= 1) Q.pop();
+    const xs = Q.map(p => p[0]), ys = Q.map(p => p[1]), cx = Math.round((Math.min(...xs) + Math.max(...xs)) / 2), cy = Math.round((Math.min(...ys) + Math.max(...ys)) / 2);
+    const pts = Q.map(p => [Math.round(p[0] - cx), Math.round(p[1] - cy)]), c = !!closed && pts.length > 2;
+    return { x: cx, y: cy, pts, closed: c, w: Math.round(polyLen(pts, c)), rot: 0 };
+  }
+  // outline of a thick polyline with mitred corners: one ring if open, outer + inner ring if closed
+  function wallOutline(P, t, closed) {
+    const n = P.length, h = t / 2, nrm = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return [-dy / l, dx / l]; };
+    const L = [], R = [];
+    for (let i = 0; i < n; i++) {
+      const pr = closed ? P[(i - 1 + n) % n] : P[i - 1], nx = closed ? P[(i + 1) % n] : P[i + 1];
+      let v, k = 1;
+      if (!pr) v = nrm(P[i], nx); else if (!nx) v = nrm(pr, P[i]);
+      else { const a = nrm(pr, P[i]), b = nrm(P[i], nx); v = [a[0] + b[0], a[1] + b[1]]; const l = Math.hypot(v[0], v[1]); if (l < 1e-6) v = a; else { v = [v[0] / l, v[1] / l]; k = Math.min(4, 1 / Math.max(0.25, v[0] * a[0] + v[1] * a[1])); } }
+      L.push([P[i][0] + v[0] * h * k, P[i][1] + v[1] * h * k]); R.push([P[i][0] - v[0] * h * k, P[i][1] - v[1] * h * k]);
+    }
+    return closed ? [L, R] : [[...L, ...R.reverse()]];
+  }
+  const ringPath = rings => rings.map(r => "M" + r.map(p => `${Math.round(p[0])},${Math.round(p[1])}`).join(" L") + " Z").join(" ");
+  // closest distance between a segment and a rectangle (0 if they touch)
+  function segRectDist(A, B, r) {
+    const inR = p => p[0] >= r.x1 && p[0] <= r.x2 && p[1] >= r.y1 && p[1] <= r.y2;
+    if (inR(A) || inR(B)) return 0;
+    const C = [[r.x1, r.y1], [r.x2, r.y1], [r.x2, r.y2], [r.x1, r.y2]], X = (p, q, a) => (q[0] - p[0]) * (a[1] - p[1]) - (q[1] - p[1]) * (a[0] - p[0]);
+    const cross = (p, q, a, b) => (X(p, q, a) > 0) !== (X(p, q, b) > 0) && (X(a, b, p) > 0) !== (X(a, b, q) > 0);
+    if (C.some((c, i) => cross(A, B, c, C[(i + 1) % 4]))) return 0;
+    const pd = (p, a, b) => { const vx = b[0] - a[0], vy = b[1] - a[1], l = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / l)); return Math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy); };
+    const ptR = p => Math.hypot(Math.max(r.x1 - p[0], 0, p[0] - r.x2), Math.max(r.y1 - p[1], 0, p[1] - r.y2));
+    return Math.min(ptR(A), ptR(B), ...C.map(c => pd(c, A, B)));
+  }
+  const hitsRect = (it, r, tol = 10) => it.pts ? wallSegs(it).some(([A, B]) => segRectDist(A, B, r) < it.d / 2 - tol) : overlap(bbox(it), r, tol);
+  const itemsOverlap = (a, b) => a.type === "wall" && b.type === "wall" ? false : a.pts ? hitsRect(a, bbox(b)) : b.pts ? hitsRect(b, bbox(a)) : overlap(bbox(a), bbox(b));
   const frontVec = rot => [[0, 1], [-1, 0], [0, -1], [1, 0]][((rot % 360) + 360) % 360 / 90 | 0];
   const overlap = (a, b, tol = 10) => a.x1 < b.x2 - tol && b.x1 < a.x2 - tol && a.y1 < b.y2 - tol && b.y1 < a.y2 - tol;
   // the strip of floor in front of (or behind) a rack, `depth` mm deep
@@ -1310,11 +1393,11 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   // problems a data-centre layout should not have
   function planChecks(f, items) {
     const out = [], bad = new Set(), solid = items.filter(it => PTYPES[it.type].solid);
-    for (let i = 0; i < solid.length; i++) for (let j = i + 1; j < solid.length; j++) if (overlap(bbox(solid[i]), bbox(solid[j]))) { out.push(`${solid[i].name || PTYPES[solid[i].type].label}와(과) ${solid[j].name || PTYPES[solid[j].type].label}이(가) 겹칩니다.`); bad.add(keyOf(solid[i])); bad.add(keyOf(solid[j])); }
+    for (let i = 0; i < solid.length; i++) for (let j = i + 1; j < solid.length; j++) if (itemsOverlap(solid[i], solid[j])) { out.push(`${solid[i].name || PTYPES[solid[i].type].label}와(과) ${solid[j].name || PTYPES[solid[j].type].label}이(가) 겹칩니다.`); bad.add(keyOf(solid[i])); bad.add(keyOf(solid[j])); }
     for (const it of items) { const b = bbox(it); if (b.x1 < -10 || b.y1 < -10 || b.x2 > f.w + 10 || b.y2 > f.h + 10) { out.push(`${it.name || PTYPES[it.type].label}이(가) 바닥 밖으로 나갑니다.`); bad.add(keyOf(it)); } }
     for (const it of items.filter(x => x.type === "rack")) {
       const fr = aisleStrip(it, 1200, false), bk = aisleStrip(it, 900, true);
-      const hitF = solid.find(o => o !== it && overlap(fr, bbox(o))), hitB = solid.find(o => o !== it && overlap(bk, bbox(o)));
+      const hitF = solid.find(o => o !== it && hitsRect(o, fr)), hitB = solid.find(o => o !== it && hitsRect(o, bk));
       if (hitF) { out.push(`${it.name} 앞쪽 통로가 1.2 m보다 좁습니다 (${hitF.name || PTYPES[hitF.type].label}).`); bad.add(keyOf(it)); }
       if (hitB) { out.push(`${it.name} 뒤쪽 통로가 0.9 m보다 좁습니다 (${hitB.name || PTYPES[hitB.type].label}).`); bad.add(keyOf(it)); }
     }
@@ -1363,6 +1446,8 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
         body = `<rect class="pl-body" x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}"/><path class="pl-swing" d="M${-w / 2},${d / 2} A${w},${w} 0 0 0 ${w / 2},${d / 2 - w}"/>`;
       } else if (it.type === "column") {
         body = `<rect class="pl-body" x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}"/><path class="pl-hatch" d="M${-w / 2},${-d / 2} L${w / 2},${d / 2} M${w / 2},${-d / 2} L${-w / 2},${d / 2}"/>`;
+      } else if (it.pts) {
+        body = `<path class="pl-body" fill-rule="evenodd" d="${ringPath(wallOutline(it.pts, d, it.closed))}"/><path class="pl-hit" style="stroke-width:${Math.max(d, (opts.px || 25) * 14)}px" d="M${it.pts.map(p => p.join(",")).join(" L")}${it.closed ? " Z" : ""}"/>`;
       } else if (it.type === "label") body = `<rect class="pl-body" x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}"/>`;
       else body = `<rect class="pl-body" x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}"/>`;
       g += `<g class="${cls}" data-pi="${esc(k)}" transform="translate(${it.x} ${it.y}) rotate(${it.rot})">${body}</g>`;
@@ -1380,8 +1465,22 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       g += `<path class="pl-cable" d="M${a.x},${a.y} L${mid.x},${mid.y} L${b.x},${b.y}"/><text class="pl-cablelbl" x="${mid.x + 120}" y="${mid.y - 120}">${p.n}가닥 · ${p.std}m</text>`;
     }
     if (opts.sel?.size === 1) {   // dimensions of the selected object
-      const it = items.find(i => sel.has(keyOf(i)));
-      if (it) { const b = bbox(it); g += `<text class="pl-dim" x="${(b.x1 + b.x2) / 2}" y="${b.y1 - 120}">${Math.round(b.x2 - b.x1)}</text><text class="pl-dim" x="${b.x2 + 140}" y="${(b.y1 + b.y2) / 2}" transform="rotate(90 ${b.x2 + 140} ${(b.y1 + b.y2) / 2})">${Math.round(b.y2 - b.y1)}</text>`; }
+      const it = items.find(i => sel.has(keyOf(i))), px = opts.px || 25;
+      if (it?.pts) {   // a bent wall: each side's length, its corners to drag, and a + in the middle of each side to add a corner
+        const P = absPts(it), S = wallSegs(it);
+        S.forEach(([A, B], i) => {
+          const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2, l = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1, nx = -(B[1] - A[1]) / l, ny = (B[0] - A[0]) / l, off = it.d / 2 + px * 16;
+          g += `<text class="pl-dim" x="${mx + nx * off}" y="${my + ny * off + px * 5}" style="font-size:${px * 13}px">${mm(l)}</text>`;
+          g += `<g data-pm="${i}" data-pk="${esc(keyOf(it))}"><circle class="pl-mid" cx="${mx}" cy="${my}" r="${px * 6}" style="stroke-width:${px * 2}px"/><path class="pl-midx" style="stroke-width:${px * 1.5}px" d="M${mx - px * 3},${my} h${px * 6} M${mx},${my - px * 3} v${px * 6}"/></g>`;
+        });
+        P.forEach((p, i) => g += `<circle class="pl-vtx${PL.vsel === i ? " on" : ""}" data-pv="${i}" data-pk="${esc(keyOf(it))}" cx="${p[0]}" cy="${p[1]}" r="${px * (PL.vsel === i ? 9 : 7)}" style="stroke-width:${px * 2.5}px"/>`);
+      } else if (it) { const b = bbox(it); g += `<text class="pl-dim" x="${(b.x1 + b.x2) / 2}" y="${b.y1 - 120}">${Math.round(b.x2 - b.x1)}</text><text class="pl-dim" x="${b.x2 + 140}" y="${(b.y1 + b.y2) / 2}" transform="rotate(90 ${b.x2 + 140} ${(b.y1 + b.y2) / 2})">${Math.round(b.y2 - b.y1)}</text>`; }
+    }
+    if (opts.draft?.pts.length) {   // a bent wall being drawn
+      const D = opts.draft, P = D.pts, t = D.d, px = opts.px || 25;
+      if (P.length > 1) g += `<path class="pl-draft" fill-rule="evenodd" d="${ringPath(wallOutline(P, t, false))}"/>`;
+      if (D.cur) { const a = P.at(-1), c = D.cur, l = Math.hypot(c[0] - a[0], c[1] - a[1]); g += `<line class="pl-rubber" x1="${a[0]}" y1="${a[1]}" x2="${c[0]}" y2="${c[1]}" style="stroke-width:${t}px"/><line class="pl-rubline" x1="${a[0]}" y1="${a[1]}" x2="${c[0]}" y2="${c[1]}" style="stroke-width:${px * 1.5}px"/><text class="pl-dim pl-draftlbl" x="${(a[0] + c[0]) / 2}" y="${(a[1] + c[1]) / 2 - t / 2 - px * 10}" style="font-size:${px * 13}px">${mm(l)}${D.ang != null ? ` · ${D.ang}°` : ""}</text>`; }
+      P.forEach((p, i) => g += `<circle class="pl-draftpt" cx="${p[0]}" cy="${p[1]}" r="${px * (i ? 5 : 8)}"/>`);
     }
     if (opts.measure?.a) { const { a, b } = opts.measure, e = b || a; g += `<line class="pl-meas" x1="${a.x}" y1="${a.y}" x2="${e.x}" y2="${e.y}"/><circle class="pl-measpt" cx="${a.x}" cy="${a.y}" r="70"/>${b ? `<circle class="pl-measpt" cx="${b.x}" cy="${b.y}" r="70"/><text class="pl-dim pl-measlbl" x="${(a.x + b.x) / 2}" y="${(a.y + b.y) / 2 - 140}">${mm(Math.hypot(b.x - a.x, b.y - a.y))} (가로 ${mm(Math.abs(b.x - a.x))}, 세로 ${mm(Math.abs(b.y - a.y))})</text>` : ""}`; }
     return g;
@@ -1394,6 +1493,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   // place so the footprint's corner lands on the grid (racks sit on whole tiles)
   function snapItem(it, x, y) {
     if (!PL.snap) return { x: Math.round(x), y: Math.round(y) };
+    if (it.pts) { const [px0, py0] = it.pts[0]; return { x: snapV(x + px0) - px0, y: snapV(y + py0) - py0 }; }
     const { W, D } = dims(it); return { x: snapV(x - W / 2) + W / 2, y: snapV(y - D / 2) + D / 2 };
   }
   function renderPlanSvg() {
@@ -1401,7 +1501,8 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     if (!PL.vb || PL.fitNext) { planFit(f); PL.fitNext = false; }
     const items = planItems(f.id), chk = planChecks(f, items), cab = planCables(f, items);
     psvg.setAttribute("viewBox", PL.vb.join(" "));
-    psvg.innerHTML = planMarkup(f, items, { sel: PL.sel, bad: chk.bad, aisle: PL.aisle, cable: PL.cable, cables: cab, measure: PL.measure });
+    const px = PL.vb[2] / Math.max(200, psvg.clientWidth || 900);
+    psvg.innerHTML = planMarkup(f, items, { sel: PL.sel, bad: chk.bad, aisle: PL.aisle, cable: PL.cable, cables: cab, measure: PL.measure, px, draft: PL.tool === "wall" && PL.draft ? { ...PL.draft, d: toolSize("wall").d } : null });
     psvg.classList.toggle("placing", PL.tool !== "select");
     return { items, chk, cab };
   }
@@ -1427,6 +1528,22 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     const side = $("#planSide"), items = r.items, sel = items.filter(it => PL.sel.has(keyOf(it)));
     const row = (label, ctrl) => `<div class="pl-row"><label>${label}</label><div>${ctrl}</div></div>`;
     if (document.activeElement && side.contains(document.activeElement) && document.activeElement.matches("input,select")) return;   // do not redraw under the cursor
+    if (sel.length === 1 && sel[0].pts) {   // a bent wall
+      const it = sel[0], P = absPts(it), n = P.length, segs = n - (it.closed ? 0 : 1);
+      const arrow = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1]; return Math.abs(dx) < 1 ? (dy > 0 ? "↓" : "↑") : Math.abs(dy) < 1 ? (dx > 0 ? "→" : "←") : `${Math.round(((Math.atan2(dy, dx) * 180 / Math.PI) % 360 + 360) % 360)}°`; };
+      if (PL.vsel >= n) PL.vsel = -1;
+      side.innerHTML = `<h3>벽${it.name ? " · " + esc(it.name) : ""} <small class="pl-note">(꺾인 벽)</small></h3>`
+        + row("이름", `<input id="pl_name" value="${esc(it.name)}" placeholder="벽">`)
+        + row("두께 (mm)", `<input id="pl_d" inputmode="numeric" value="${it.d}">`)
+        + row("닫힌 벽", `<label class="toggle"><input type="checkbox" id="pl_closed"${it.closed ? " checked" : ""}${n < 3 ? " disabled" : ""}> 끝점을 첫 점에 이음</label>`)
+        + `<h4>꼭짓점 ${n}개 · 변 ${segs}개 · 총 길이 ${mm(polyLen(it.pts, it.closed))}</h4>`
+        + `<table class="pl-vt"><tr><th>#</th><th>X (m)</th><th>Y (m)</th><th>다음 변</th></tr>${P.map((p, i) => { const nx = P[i + 1] || (it.closed ? P[0] : null); return `<tr class="${PL.vsel === i ? "on" : ""}"><td><button type="button" data-pl="vsel" data-i="${i}" title="이 꼭짓점 고르기">${i + 1}</button></td><td><input id="pl_vx_${i}" inputmode="decimal" value="${(p[0] / 1000).toFixed(2)}"></td><td><input id="pl_vy_${i}" inputmode="decimal" value="${(p[1] / 1000).toFixed(2)}"></td><td class="mono">${nx ? mm(Math.hypot(nx[0] - p[0], nx[1] - p[1])) + " " + arrow(p, nx) : "–"}</td></tr>`; }).join("")}</table>`
+        + `<div class="pl-btns"><button type="button" class="btn sm" data-pl="vadd">＋ 꼭짓점 추가</button><button type="button" class="btn sm" data-pl="vdel"${PL.vsel >= 0 && n > 2 ? "" : " disabled"}>－ 선택 꼭짓점 삭제</button></div>`
+        + `<p class="pl-note">도면에서 꼭짓점(○)을 끌어 옮기고(Shift: 격자 무시), 변 가운데(＋)를 끌면 새 꼭짓점이 생깁니다. 번호를 누르면 그 꼭짓점이 골라집니다.</p>`
+        + row("방향", `<div class="pl-btns"><button type="button" class="btn sm" data-pl="rotl">⟲ 90°</button><button type="button" class="btn sm" data-pl="rotr">⟳ 90°</button></div>`)
+        + `<div class="pl-btns pl-acts"><button type="button" class="btn sm" data-pl="dup">복제</button><button type="button" class="btn sm danger" data-pl="del">삭제</button></div>`;
+      return;
+    }
     if (sel.length === 1) {
       const it = sel[0], b = bbox(it), isRack = it.type === "rack", rk = isRack ? it.doc : null;
       const devs = isRack ? inRack(rk.id).sort((x, y) => (y.rackU || 0) - (x.rackU || 0)) : [];
@@ -1523,8 +1640,33 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     await planSave(ch, "복제"); PL.sel = new Set(ch.map(c => c.col + ":" + c.id)); render();
   }
   async function planRotate(items, deg) {
-    await planSave(items.map(it => ({ col: it.col, id: it.id, body: itBody(it, { rot: ((it.rot + deg) % 360 + 360) % 360 }) })), "회전");
+    await planSave(items.map(it => ({ col: it.col, id: it.id, body: itBody(it, it.pts ? { pts: it.pts.map(([x, y]) => deg > 0 ? [-y, x] : [y, -x]), rot: 0 } : { rot: ((it.rot + deg) % 360 + 360) % 360 }) })), "회전");
   }
+  // ---- bent wall drawing: each tap adds a corner; the angle and the typed length steer where it lands
+  function wallNext(p) {
+    const P = PL.draft?.pts || [], raw = [p.x, p.y];
+    if (!P.length) return { pt: [snapV(raw[0]), snapV(raw[1])], ang: null };
+    const a = P.at(-1); let dx = raw[0] - a[0], dy = raw[1] - a[1];
+    if (PL.wallAng) {
+      const step = PL.wallAng * Math.PI / 180, th = Math.round(Math.atan2(dy, dx) / step) * step, ux = Math.round(Math.cos(th) * 1e6) / 1e6, uy = Math.round(Math.sin(th) * 1e6) / 1e6;
+      let L = PL.nextLen || Math.max(0, dx * ux + dy * uy); if (!PL.nextLen && PL.snap) L = Math.round(L / PL.snap) * PL.snap;
+      const deg = ((Math.round(th * 180 / Math.PI) % 360) + 360) % 360;
+      return { pt: [Math.round(a[0] + ux * L), Math.round(a[1] + uy * L)], ang: deg };
+    }
+    if (PL.nextLen) { const l = Math.hypot(dx, dy) || 1; return { pt: [Math.round(a[0] + dx / l * PL.nextLen), Math.round(a[1] + dy / l * PL.nextLen)], ang: null }; }
+    return { pt: [snapV(raw[0]), snapV(raw[1])], ang: null };
+  }
+  async function wallFinish(closed) {
+    const D = PL.draft; PL.draft = null;
+    if (!D || D.pts.length < 2) { renderPlan(); return; }
+    const f = curFloor(); if (!f) return;
+    const nw = normWall(D.pts, closed); if (nw.pts.length < 2) { renderPlan(); return; }
+    const id = store.newId();
+    await planSave([{ col: "planobjs", id, body: { floorId: f.id, type: "wall", name: "", ...nw, d: toolSize("wall").d } }], "꺾인 벽 추가");
+    PL.sel = new Set(["planobjs:" + id]); PL.vsel = -1; setPlanTool("select"); render();
+    toast(`꺾인 벽을 그렸습니다: 변 ${nw.pts.length - (nw.closed ? 0 : 1)}개 · 총 ${mm(nw.w)}${nw.closed ? " (닫힘)" : ""}`);
+  }
+  function wallUndoPt() { if (!PL.draft?.pts.length) return; PL.draft.pts.pop(); if (!PL.draft.pts.length) PL.draft = null; renderPlanSvg(); renderPlanDims(); }
   // ---- pointer: select / drag / pan / pinch / place / measure
   psvg.addEventListener("pointerdown", e => {
     const f = curFloor(); if (!f) return;
@@ -1532,6 +1674,15 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     if (PL.pts.size === 2) { const [a, b] = [...PL.pts.values()]; PL.drag = { kind: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y), vb: [...PL.vb], c: planPt({ clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 }) }; return; }
     const p = planPt(e), hit = e.target.closest("[data-pi]")?.dataset.pi;
     PL.drag = { kind: "none", sx: e.clientX, sy: e.clientY, p0: p, hit, moved: false, button: e.button };
+    const hv = e.target.closest("[data-pv],[data-pm]");
+    if (PL.tool === "select" && hv && e.button === 0) {   // a bent wall's corner, or the + in the middle of a side
+      const it = planItems(f.id).find(x => keyOf(x) === hv.dataset.pk); if (!it?.pts) return;
+      const orig = it.doc.pts.map(q => [...q]);
+      let i = +(hv.dataset.pv ?? -1);
+      if (hv.dataset.pm != null) { const m = +hv.dataset.pm, P = it.doc.pts, A = P[m], B = P[(m + 1) % P.length]; P.splice(m + 1, 0, [Math.round((A[0] + B[0]) / 2), Math.round((A[1] + B[1]) / 2)]); i = m + 1; }
+      PL.vsel = i; PL.drag.kind = "vtx"; PL.drag.it = it; PL.drag.i = i; PL.drag.orig = orig; PL.drag.added = hv.dataset.pm != null; renderPlanSvg(); renderPlanSide(f, { items: planItems(f.id), chk: planChecks(f, planItems(f.id)), cab: planCables(f, planItems(f.id)) });
+      return;
+    }
     if (PL.tool === "select" && hit && e.button === 0) {
       if (e.shiftKey || e.ctrlKey || e.metaKey) { PL.sel.has(hit) ? PL.sel.delete(hit) : PL.sel.add(hit); PL.drag.kind = "none"; render(); return; }
       if (!PL.sel.has(hit)) { PL.sel = new Set([hit]); render(); }
@@ -1541,6 +1692,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   });
   psvg.addEventListener("pointermove", e => {
     planReadout(e);
+    if (PL.tool === "wall" && PL.draft?.pts.length && PL.pts.size < 2) { const n = wallNext(planPt(e)); PL.draft.cur = n.pt; PL.draft.ang = n.ang; renderPlanSvg(); }
     if (!PL.pts.has(e.pointerId)) { if (PL.measure?.a && !PL.measure.b) renderPlanSvg(); return; }
     PL.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const dr = PL.drag; if (!dr) return;
@@ -1555,6 +1707,9 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       const M = psvg.getScreenCTM(); if (!M) return;
       PL.vb[0] -= (e.clientX - dr.sx) / M.a; PL.vb[1] -= (e.clientY - dr.sy) / M.d; dr.sx = e.clientX; dr.sy = e.clientY;
       psvg.setAttribute("viewBox", PL.vb.join(" "));
+    } else if (dr.kind === "vtx") {
+      const q = planPt(e), it = dr.it, ax = e.shiftKey ? Math.round(q.x) : snapV(q.x), ay = e.shiftKey ? Math.round(q.y) : snapV(q.y);
+      it.doc.pts[dr.i] = [ax - it.doc.x, ay - it.doc.y]; dr.dx = 1; renderPlanSvg();
     } else if (dr.kind === "move") {
       const p = planPt(e), dx = p.x - dr.p0.x, dy = p.y - dr.p0.y, lead = dr.orig[0], s = snapItem(lead.it, lead.x + dx, lead.y + dy), ddx = s.x - lead.x, ddy = s.y - lead.y;
       for (const o of dr.orig) { const nx = o.x + ddx, ny = o.y + ddy; if (o.it.col === "racks") { o.it.doc.px = nx; o.it.doc.py = ny; } else { o.it.doc.x = nx; o.it.doc.y = ny; } }
@@ -1567,10 +1722,17 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     if (dr.kind === "pinch") { if (!PL.pts.size) PL.drag = null; return; }
     PL.drag = null;
     const f = curFloor(); if (!f) return;
+    if (dr.kind === "vtx") {
+      const it = dr.it, now = it.doc.pts.map(q => [...q]); it.doc.pts = dr.orig;   // put the stored shape back so undo remembers it
+      if (dr.moved && dr.dx) { const nw = normWall(now.map(q => [q[0] + it.doc.x, q[1] + it.doc.y]), it.doc.closed); if (nw.pts.length >= 2) await planSave([{ col: it.col, id: it.id, body: { ...strip(it.doc), ...nw, updatedAt: new Date().toISOString() } }], dr.added ? "꼭짓점 추가" : "꼭짓점 이동"); }
+      else if (dr.added) PL.vsel = -1;
+      render(); return;
+    }
     if (dr.kind === "move" && dr.moved) {
-      if (dr.dx || dr.dy) await planSave(dr.orig.map(o => { const fx = o.it.col === "racks" ? o.it.doc.px : o.it.doc.x, fy = o.it.col === "racks" ? o.it.doc.py : o.it.doc.y; return { col: o.it.col, id: o.it.id, body: { ...strip(o.it.doc), ...(o.it.col === "racks" ? { location: `${f.name} ${tileOf(f, fx - dims(o.it).W / 2 + 1, fy - dims(o.it).D / 2 + 1)}` } : {}), updatedAt: new Date().toISOString() } }; }), "이동");
-      // restore the drawn-only positions if nothing changed
-      else for (const o of dr.orig) { if (o.it.col === "racks") { o.it.doc.px = o.x; o.it.doc.py = o.y; } else { o.it.doc.x = o.x; o.it.doc.y = o.y; } }
+      const bodies = dr.orig.map(o => { const fx = o.it.col === "racks" ? o.it.doc.px : o.it.doc.x, fy = o.it.col === "racks" ? o.it.doc.py : o.it.doc.y; return { col: o.it.col, id: o.it.id, body: { ...strip(o.it.doc), ...(o.it.col === "racks" ? { location: `${f.name} ${tileOf(f, fx - dims(o.it).W / 2 + 1, fy - dims(o.it).D / 2 + 1)}` } : {}), updatedAt: new Date().toISOString() } }; });
+      // put the drawn-only positions back first, so undo remembers where things were
+      for (const o of dr.orig) { if (o.it.col === "racks") { o.it.doc.px = o.x; o.it.doc.py = o.y; } else { o.it.doc.x = o.x; o.it.doc.y = o.y; } }
+      if (dr.dx || dr.dy) await planSave(bodies, "이동");
       render(); return;
     }
     if (dr.moved) return;
@@ -1582,6 +1744,15 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     }
     if (PL.tool === "measure") { PL.measure = !PL.measure?.a || PL.measure.b ? { a: { x: snapV(p.x), y: snapV(p.y) } } : { a: PL.measure.a, b: { x: snapV(p.x), y: snapV(p.y) } }; renderPlanSvg(); return; }
     if (PL.tool === "row") { openRowDlg(p); return; }
+    if (PL.tool === "wall" && PL.wallMode === "poly") {
+      const P = PL.draft?.pts || [], M = psvg.getScreenCTM(), tol = 14 / (M?.a || 0.04);
+      if (P.length >= 3 && Math.hypot(p.x - P[0][0], p.y - P[0][1]) < tol) { await wallFinish(true); return; }   // back on the first corner: a closed ring
+      const n = wallNext(p).pt;
+      if (P.length && Math.hypot(n[0] - P.at(-1)[0], n[1] - P.at(-1)[1]) < 1) { PL.draft.dup = true; return; }   // the second tap of a double tap
+      PL.draft ||= { pts: [] }; PL.draft.pts.push(n); PL.draft.cur = null; PL.draft.dup = false;
+      if (PL.nextLen) { PL.nextLen = null; }
+      renderPlanSvg(); renderPlanDims(); return;
+    }
     if (PTYPES[PL.tool]) { await planAdd(PL.tool, p.x, p.y); setPlanTool("select"); render(); return; }
     if (PL.tool === "select" && !dr.hit && PL.sel.size) { PL.sel.clear(); render(); }
   }
@@ -1592,11 +1763,16 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     const w = Math.max(2000, Math.min(400000, vb[2] * k)), h = vb[3] * (w / vb[2]);
     PL.vb = [p.x - (p.x - vb[0]) * (w / vb[2]), p.y - (p.y - vb[1]) * (h / vb[3]), w, h]; psvg.setAttribute("viewBox", PL.vb.join(" "));
   }, { passive: false });
-  psvg.addEventListener("dblclick", e => { const hit = e.target.closest("[data-pi]")?.dataset.pi; if (hit?.startsWith("racks:")) { state.view = "rack"; setView("rack"); render(); } });
-  function setPlanTool(t) { PL.tool = t; PL.placeRack = null; if (t !== "measure") PL.measure = null; $("#planHint").textContent = { select: "물체를 눌러 고르고 끌어서 옮깁니다. 빈 곳을 끌면 화면이 움직입니다. Shift+누르기로 여러 개 고르기.", row: "랙 줄을 시작할 자리(왼쪽 위)를 누르세요.", measure: "두 점을 차례로 누르면 거리를 잽니다." }[t] || `${PTYPES[t]?.label || ""}을(를) 놓을 자리를 누르세요.`; }
+  psvg.addEventListener("dblclick", e => { if (PL.tool === "wall" && PL.draft) { e.preventDefault(); if (PL.draft.dup) wallFinish(false); return; } const hit = e.target.closest("[data-pi]")?.dataset.pi; if (hit?.startsWith("racks:")) { state.view = "rack"; setView("rack"); render(); } });
+  function setPlanTool(t) { PL.tool = t; PL.placeRack = null; if (t !== "measure") PL.measure = null; if (t !== "wall") PL.draft = null; $("#planHint").textContent = t === "wall" && PL.wallMode === "poly" ? "점을 차례로 누르세요. 더블클릭·Enter·완료로 끝, 첫 점을 다시 누르면 닫힌 벽(방 둘레), Backspace로 마지막 점 취소, Esc로 그리기 취소. 휴대폰은 완료 버튼을 쓰세요." : { select: "물체를 눌러 고르고 끌어서 옮깁니다. 빈 곳을 끌면 화면이 움직입니다. Shift+누르기로 여러 개 고르기.", row: "랙 줄을 시작할 자리(왼쪽 위)를 누르세요.", measure: "두 점을 차례로 누르면 거리를 잽니다." }[t] || `${PTYPES[t]?.label || ""}을(를) 놓을 자리를 누르세요.`; }
   document.addEventListener("keydown", e => {
     if (state.view !== "plan" || e.target.closest("input,select,textarea,dialog")) return;
     const f = curFloor(); if (!f) return;
+    if (PL.tool === "wall" && PL.draft) {
+      if (e.key === "Enter") { e.preventDefault(); wallFinish(false); return; }
+      if (e.key === "Backspace" || e.key === "Delete") { e.preventDefault(); wallUndoPt(); return; }
+      if (e.key === "Escape") { e.preventDefault(); PL.draft = null; renderPlan(); return; }
+    }
     const items = planItems(f.id).filter(it => PL.sel.has(keyOf(it)));
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); planUndo(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") { e.preventDefault(); planDup(items); return; }
@@ -1634,12 +1810,17 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   });
   // ---- size bar for the tool being placed
   $("#planDims").addEventListener("change", e => {
+    if (e.target.id === "pd_len") { const v = e.target.value.trim(), n = Math.round(parseFloat(v)); if (v && !(n >= 50 && n <= 500000)) { toast("50–500000 mm로 넣으세요."); e.target.value = ""; PL.nextLen = null; return; } PL.nextLen = v ? n : null; e.target.blur(); return; }
     const t = PL.tool, D = pdimOf(t), k = D.u === "m" ? 1000 : 1, n = Math.round(parseFloat(e.target.value) * k), key = e.target.id === "pd_w" ? "w" : "d";
     if (!PTYPES[t] || !(n >= 50 && n <= 500000)) { toast(k > 1 ? "0.05–500 m로 넣으세요." : "50–500000 mm로 넣으세요."); e.target.blur(); renderPlanDims(); return; }
     setToolDim(t, { [key]: n }); e.target.blur(); renderPlanDims();
   });
   $("#planDims").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches("input")) { e.preventDefault(); e.target.blur(); } });
   $("#planDims").addEventListener("click", e => {
+    const md = e.target.closest("[data-pdmode]"), an = e.target.closest("[data-pdang]"), ac = e.target.closest("[data-pdact]");
+    if (md) { PL.wallMode = md.dataset.pdmode; PL.draft = null; try { localStorage.setItem("portbook.wallMode", PL.wallMode); } catch (err) {} setPlanTool("wall"); renderPlan(); return; }
+    if (an) { PL.wallAng = +an.dataset.pdang; try { localStorage.setItem("portbook.wallAng", PL.wallAng); } catch (err) {} renderPlanDims(); return; }
+    if (ac) { if (ac.dataset.pdact === "undo") wallUndoPt(); else wallFinish(false); return; }
     const b = e.target.closest("[data-pdpre]"); if (!b) return;
     setToolDim(PL.tool, Object.fromEntries(b.dataset.pdpre.split(",").map(x => { const [k, v] = x.split(":"); return [k, +v]; }))); renderPlanDims();
   });
@@ -1661,6 +1842,17 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     else if (a === "dup") await planDup(items);
     else if (a === "del") await planDelete(items);
     else if (a === "openrack") { setView("rack"); render(); }
+    else if (a === "vsel") { PL.vsel = PL.vsel === +b.dataset.i ? -1 : +b.dataset.i; }
+    else if ((a === "vadd" || a === "vdel") && items[0]?.pts) {
+      const it = items[0], P = absPts(it), n = P.length;
+      if (a === "vdel") { if (PL.vsel < 0 || n <= 2) return; P.splice(PL.vsel, 1); PL.vsel = -1; }
+      else { const i = PL.vsel >= 0 ? PL.vsel : n - 1, j = i + 1 < n ? i + 1 : it.closed ? 0 : -1;
+        if (j >= 0) P.splice(i + 1, 0, [Math.round((P[i][0] + P[j][0]) / 2), Math.round((P[i][1] + P[j][1]) / 2)]);
+        else { const A = P[n - 2], B = P[n - 1], l = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1, step = PL.snap || 600; P.push([Math.round(B[0] + (B[0] - A[0]) / l * step * 2), Math.round(B[1] + (B[1] - A[1]) / l * step * 2)]); }
+        PL.vsel = i + 1; }
+      const nw = normWall(P, it.closed && P.length > 2);
+      await planSave([{ col: it.col, id: it.id, body: { ...strip(it.doc), ...nw, updatedAt: new Date().toISOString() } }], a === "vadd" ? "꼭짓점 추가" : "꼭짓점 삭제");
+    }
     else if (a === "alignx" || a === "aligny") { const v = a === "alignx" ? items[0].y : items[0].x; await planSave(items.map(it => ({ col: it.col, id: it.id, body: itBody(it, a === "alignx" ? { y: v } : { x: v }) })), "줄 맞춤"); }
     else if (a === "delfloor") {
       const its = planItems(f.id);
@@ -1679,6 +1871,12 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     }
     const items = planItems(f.id).filter(it => PL.sel.has(keyOf(it))); if (items.length !== 1) return; const it = items[0], b = bbox(it);
     let patch = null;
+    if (it.pts && (id === "pl_closed" || id.startsWith("pl_vx_") || id.startsWith("pl_vy_") || id === "pl_d")) {
+      if (id === "pl_d") { const n = parseInt(v, 10); if (!(n >= 50 && n <= 2000)) { toast("두께는 50–2000 mm"); render(); return; } patch = { d: n }; }
+      else if (id === "pl_closed") { const nw = normWall(absPts(it), e.target.checked); patch = nw; }
+      else { const i = +id.split("_").pop(), n = parseFloat(v) * 1000; if (!Number.isFinite(n)) { render(); return; } const P = absPts(it); P[i][id.startsWith("pl_vx_") ? 0 : 1] = Math.round(n); patch = normWall(P, it.closed); if (patch.pts.length < 2) { toast("꼭짓점이 겹칩니다."); render(); return; } }
+      await planSave([{ col: it.col, id: it.id, body: { ...strip(it.doc), ...patch, updatedAt: new Date().toISOString() } }], "벽 모양"); render(); return;
+    }
     if (id === "pl_name") {
       if (it.type === "rack") { if (!v) { toast("랙 이름을 넣으세요."); render(); return; } if (state.racks.some(r => r.id !== it.id && r.name.toLowerCase() === v.toLowerCase())) { toast("같은 이름의 랙이 있습니다."); render(); return; } }
       patch = { name: v };
@@ -1714,7 +1912,9 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     rect("FLOOR", { x1: 0, y1: 0, x2: f.w, y2: f.h });
     const t = f.tile || 600; for (let x = t; x < f.w; x += t) line("GRID", x, 0, x, f.h); for (let y = t; y < f.h; y += t) line("GRID", 0, y, f.w, y);
     for (const it of items) {
-      const b = bbox(it), L = it.type.toUpperCase(); rect(L, b);
+      const b = bbox(it), L = it.type.toUpperCase();
+      if (it.pts) { for (const r of wallOutline(absPts(it), it.d, it.closed)) r.forEach((q, i) => { const nx = r[(i + 1) % r.length]; line(L, q[0], q[1], nx[0], nx[1]); }); if (it.name) text("TEXT", it.x, it.y, 160, it.name); continue; }
+      rect(L, b);
       if (it.type === "rack") { const s = aisleStrip(it, 0, false), [fx, fy] = frontVec(it.rot); if (fy) line("RACK-FRONT", b.x1, fy > 0 ? b.y2 : b.y1, b.x2, fy > 0 ? b.y2 : b.y1); else line("RACK-FRONT", fx > 0 ? b.x2 : b.x1, b.y1, fx > 0 ? b.x2 : b.x1, b.y2); void s; }
       const label = it.type === "rack" ? it.name : it.name || PTYPES[it.type].label;
       if (label) text("TEXT", it.x, it.y, it.type === "room" ? 300 : 160, label);
@@ -1920,8 +2120,101 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     rows.forEach((r, ri) => r.forEach(id => { pos[id] = { x: Math.round(xs.get(id)), y: Math.round(ri * ROW + (yoff.get(id) || 0)) }; }));
     return pos;
   }
+  // Pyramid: one device on top (the router facing outward), then rows by cable hops from it, each row centred,
+  // so rows widen downward; a device sits over the devices that hang below it.
+  function autoPosPyramid(all) {
+    const GAP = 320, ROW = 320, pos = {};
+    if (!all.length) return pos;
+    const ids = new Set(all.map(d => d.id)), byId = new Map(all.map(d => [d.id, d])), nb = new Map(all.map(d => [d.id, new Set()]));
+    for (const l of links()) if (ids.has(l.aDev) && ids.has(l.bDev) && l.aDev !== l.bDev) { nb.get(l.aDev).add(l.bDev); nb.get(l.bDev).add(l.aDev); }
+    const rank = d => ({ firewall: 0, router: 0, l3switch: 1, switch: 2 })[d.kind] ?? 3, nameCmp = (a, b) => natCmp(byId.get(a).name, byId.get(b).name);
+    // connected groups; devices with no cable go in a column at the right
+    const comps = [], seen = new Set(), lone = [];
+    for (const d of [...all].sort((a, b) => natCmp(a.name, b.name))) {
+      if (seen.has(d.id)) continue;
+      if (!nb.get(d.id).size) { seen.add(d.id); lone.push(d.id); continue; }
+      const c = [d.id]; seen.add(d.id);
+      for (let i = 0; i < c.length; i++) for (const n of nb.get(c[i])) if (!seen.has(n)) { seen.add(n); c.push(n); }
+      comps.push(c);
+    }
+    comps.sort((a, b) => b.length - a.length);
+    const layersFrom = (top, comp) => {
+      const dep = new Map([[top, 0]]), q = [top];
+      for (let i = 0; i < q.length; i++) for (const n of nb.get(q[i])) if (!dep.has(n)) { dep.set(n, dep.get(q[i]) + 1); q.push(n); }
+      const L = []; for (const id of comp) (L[dep.get(id)] ||= []).push(id);
+      return { L, dep };
+    };
+    // how well a choice of top device makes a pyramid: rows of one kind each, rows not narrowing downward
+    const topCost = (top, comp) => {
+      const { L } = layersFrom(top, comp); let c = rank(byId.get(top)) * 6;
+      L.forEach((r, i) => {
+        const ks = r.map(id => byId.get(id)).filter(d => rank(d) < 3 || nb.get(d.id).size > 1).map(rank);
+        if (ks.length) { const cnt = {}; ks.forEach(k => cnt[k] = (cnt[k] || 0) + 1); const mode = +Object.entries(cnt).sort((a, b) => b[1] - a[1])[0][0]; ks.forEach(k => c += Math.abs(k - mode) * 2); }
+        if (i && r.length < L[i - 1].length) c += (L[i - 1].length - r.length) * 0.5;
+        if (i) r.forEach(id => { const k = rank(byId.get(id)); if (k < 3 && L.slice(0, i).some(u => u.some(x => rank(byId.get(x)) > k && rank(byId.get(x)) < 3))) c += 3; });
+      });
+      return c;
+    };
+    let ox = 0;
+    for (const comp of comps) {
+      const pinned = comp.find(id => byId.get(id).pyTop);
+      let top = pinned;
+      if (!top) {
+        const minR = Math.min(...comp.map(id => rank(byId.get(id))));
+        let best = Infinity;
+        for (const id of comp.filter(x => rank(byId.get(x)) === minR || comp.length <= 40).sort(nameCmp)) { const c = topCost(id, comp); if (c < best - 1e-9) { best = c; top = id; } }
+      }
+      const { L, dep } = layersFrom(top, comp);
+      // first order: under the parent, parents' order kept; single-cable devices after the others of their parent
+      const idx = new Map([[top, 0]]);
+      for (let i = 1; i < L.length; i++) {
+        const key = id => { const up = [...nb.get(id)].filter(n => dep.get(n) === i - 1).map(n => idx.get(n)); return Math.min(...up); };
+        L[i].sort((a, b) => key(a) - key(b) || (nb.get(a).size === 1) - (nb.get(b).size === 1) || nameCmp(a, b));
+        L[i].forEach((id, k) => idx.set(id, k));
+      }
+      // x: the bottom row evenly spaced (a little extra between groups of different parents), rows above over their children
+      const place = () => {
+        const xs = new Map();
+        for (let i = L.length - 1; i >= 0; i--) {
+          const r = L[i], want = r.map(id => { const ch = [...nb.get(id)].filter(n => dep.get(n) === i + 1 && xs.has(n)); return ch.length ? ch.reduce((a, n) => a + xs.get(n), 0) / ch.length : null; });
+          // devices with nothing below: between their row neighbours
+          for (let k = 0; k < r.length; k++) if (want[k] === null) { let a = k - 1; while (a >= 0 && want[a] === null) a--; let b = k + 1; while (b < r.length && want[b] === null) b++; want[k] = a >= 0 && b < r.length ? want[a] + (want[b] - want[a]) * (k - a) / (b - a) : a >= 0 ? want[a] + (k - a) * GAP : b < r.length ? want[b] - (b - k) * GAP : (k - (r.length - 1) / 2) * GAP; }
+          const par = id => { const up = [...nb.get(id)].filter(n => dep.get(n) === i - 1); return up.length ? Math.min(...up.map(n => idx.get(n))) : -1; };
+          const out = []; want.forEach((w, k) => out.push(k ? Math.max(w, out[k - 1] + GAP * (par(r[k]) !== par(r[k - 1]) ? 1.25 : 1)) : w));
+          for (let k = out.length - 2; k >= 0; k--) out[k] = Math.min(out[k], out[k + 1] - GAP * (par(r[k]) !== par(r[k + 1]) ? 1.25 : 1));
+          const mid = (out[0] + out[out.length - 1]) / 2, all0 = want.every((w, k) => w === (k - (r.length - 1) / 2) * GAP);
+          r.forEach((id, k) => xs.set(id, out[k] - (i === L.length - 1 || all0 ? mid : 0)));
+        }
+        // each row centred on the same line
+        L.forEach(r => { const mid = (xs.get(r[0]) + xs.get(r[r.length - 1])) / 2; r.forEach(id => xs.set(id, xs.get(id) - mid)); });
+        const P = {}; L.forEach((r, i) => r.forEach(id => { P[id] = { x: xs.get(id), y: i * ROW }; })); return P;
+      };
+      const cdevs = comp.map(id => byId.get(id));
+      let P = place(), best = layoutScore(P, cdevs);
+      // improve the order inside each row while it untangles cables (each row stays centred)
+      const deadline = performance.now() + Math.min(2500, 300 + comp.length * 40);
+      for (let pass = 0; pass < 12 && best > 0 && performance.now() < deadline; pass++) {
+        let improved = false;
+        for (const r of L) for (let a = 0; a < r.length && performance.now() < deadline; a++) for (let b = 0; b < r.length; b++) {
+          if (a === b) continue;
+          const keep = [...r], [m] = r.splice(a, 1); r.splice(b, 0, m); r.forEach((id, k) => idx.set(id, k));
+          const Q = place(), c = layoutScore(Q, cdevs);
+          if (c < best - 1e-9) { best = c; P = Q; improved = true; } else { r.splice(0, r.length, ...keep); r.forEach((id, k) => idx.set(id, k)); }
+        }
+        if (!improved) break;
+      }
+      const xsAll = Object.values(P).map(p => p.x), minX = Math.min(...xsAll), maxX = Math.max(...xsAll);
+      for (const id in P) pos[id] = { x: Math.round(P[id].x - minX + ox), y: Math.round(P[id].y) };
+      ox += maxX - minX + GAP * 2;
+    }
+    lone.forEach((id, i) => { pos[id] = { x: ox, y: i * ROW * 0.6 }; });
+    return pos;
+  }
+  let autoMode = "pyramid";
+  try { autoMode = localStorage.getItem("portbook.autoMode") || "pyramid"; } catch (e) {}
+  const autoLayout = devs => autoMode === "cross" ? autoPos(devs) : autoPosPyramid(devs);
   let autoMemo = { k: "", v: {} };
-  function autoPosCached(devs) { const k = devs.map(d => d.id + d.kind).join() + "#" + state.ifaces.map(i => i.peerIfId || "").join(); if (k !== autoMemo.k) autoMemo = { k, v: autoPos(devs) }; return autoMemo.v; }
+  function autoPosCached(devs) { const k = autoMode + devs.map(d => d.id + d.kind + (d.pyTop ? "^" : "")).join() + "#" + state.ifaces.map(i => i.peerIfId || "").join(); if (k !== autoMemo.k) autoMemo = { k, v: autoLayout(devs) }; return autoMemo.v; }
   function positions() {
     const devs = sortedDevices(), auto = devs.some(d => typeof d.x !== "number") ? autoPosCached(devs) : {}, pos = {};
     for (const d of devs) pos[d.id] = drag?.id === d.id && drag.moved ? { x: drag.x, y: drag.y } : (typeof d.x === "number" ? { x: d.x, y: d.y } : auto[d.id]);
@@ -3496,7 +3789,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     if (t.type === "node") {
       const d = state.devices.find(x => x.id === t.id); if (!d) return;
       head = `<div class="hd"><b>${esc(d.name)}</b>${esc([KIND[d.kind], d.model].filter(Boolean).join(" · "))}</div>`;
-      items = [["ptcfg", "설정 창 (Physical · Config · CLI)"], ["edit-dev", "수정 (이름 · 모델 · 관리 IP)"], ["open-cfg", "포트 설정 열기"], ...(cliCapable(d) ? [["cli", CLI_OK_KINDS.includes(d.kind) ? "CLI로 설정 (IOS 명령)" : "Command Prompt (ipconfig · ping)"]] : []), ["rear", "포트 패널 그림 보기"], ["start-cable", "여기서 케이블 연결"], ["del-dev", "삭제", "danger"]];
+      items = [["ptcfg", "설정 창 (Physical · Config · CLI)"], ["edit-dev", "수정 (이름 · 모델 · 관리 IP)"], ["open-cfg", "포트 설정 열기"], ...(cliCapable(d) ? [["cli", CLI_OK_KINDS.includes(d.kind) ? "CLI로 설정 (IOS 명령)" : "Command Prompt (ipconfig · ping)"]] : []), ["rear", "포트 패널 그림 보기"], ["start-cable", "여기서 케이블 연결"], ["pytop", d.pyTop ? "▲ 피라미드 꼭대기 (지금) · 다시 배치" : "▲ 피라미드 꼭대기로"], ["del-dev", "삭제", "danger"]];
     } else {
       const A = state.ifaces.find(x => x.id === t.id); if (!A) return;
       const B = A.peerIfId ? state.ifaces.find(x => x.id === A.peerIfId) : null;
@@ -3520,6 +3813,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     else if (act === "open-cfg") { state.selected = id; state.cfgOpen = true; remember(); renderTopo(); }
     else if (act === "start-cable") { setTool({ kind: "cable", step: 1 }); cableClick(id); }
     else if (act === "del-dev") askDeleteDevice(id);
+    else if (act === "pytop") setPyTop(id);
     else if (act === "edit-port") { const i = state.ifaces.find(x => x.id === id); if (i) openIf(i); }
     else if (act === "edit-cable") editCable(id);
     else if (act === "memo") openMemo(id);
@@ -3579,15 +3873,34 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       if (state.tool?.kind === "cable") { cableClick(g.dataset.node); e.preventDefault(); return; }
       state.selected = g.dataset.node; state.cfgOpen = true; remember(); renderTopo(); svg.querySelector(`[data-node="${CSS.escape(g.dataset.node)}"]`)?.focus(); e.preventDefault(); }
   });
-  $("#autoBtn").addEventListener("click", async () => {
-    const pos = autoPos(sortedDevices());
+  async function runAuto(mode) {
+    if (mode) { autoMode = mode; try { localStorage.setItem("portbook.autoMode", mode); } catch (e) {} }
+    const devs = sortedDevices(); if (!devs.length) { toast("배치할 장비가 없습니다."); return; }
+    const pos = autoLayout(devs);
     try {
-      for (const d of sortedDevices()) { d.x = pos[d.id].x; d.y = pos[d.id].y; }
-      lastVB = null; renderTopo();
-      for (const d of sortedDevices()) await store.save("devices", d.id, { ...strip(d), x: pos[d.id].x, y: pos[d.id].y });
-      toast("케이블이 겹치지 않게 다시 배치했습니다.");
+      for (const d of devs) { d.x = pos[d.id].x; d.y = pos[d.id].y; }
+      lastVB = null; manualVB = null; fitAll = true; renderTopo();
+      for (const d of devs) await store.save("devices", d.id, { ...strip(d), x: pos[d.id].x, y: pos[d.id].y });
+      toast(autoMode === "cross" ? "케이블이 겹치지 않게 다시 배치했습니다." : "피라미드 모양으로 다시 배치했습니다.");
     } catch (e) { writeErr(e); }
+  }
+  function closeAutoMenu() { $("#autoMenu").hidden = true; $("#autoBtn").setAttribute("aria-expanded", "false"); }
+  $("#autoBtn").addEventListener("click", () => {
+    const m = $("#autoMenu"); m.hidden = !m.hidden; $("#autoBtn").setAttribute("aria-expanded", String(!m.hidden));
+    m.querySelectorAll("[data-auto]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.auto === autoMode)));
+    if (!m.hidden) m.querySelector(`[data-auto="${autoMode}"]`)?.focus({ preventScroll: true });
   });
+  $("#autoMenu").addEventListener("click", e => { const b = e.target.closest("[data-auto]"); if (!b) return; closeAutoMenu(); runAuto(b.dataset.auto); });
+  document.addEventListener("pointerdown", e => { if (!e.target.closest(".automenu")) closeAutoMenu(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeAutoMenu(); });
+  async function setPyTop(id) {
+    const d = state.devices.find(x => x.id === id); if (!d) return;
+    try {
+      for (const x of state.devices) if (x.pyTop && x.id !== id) { x.pyTop = false; await store.save("devices", x.id, { ...strip(x), pyTop: false }); }
+      d.pyTop = true; await store.save("devices", id, { ...strip(d), pyTop: true });
+    } catch (e) { writeErr(e); return; }
+    await runAuto("pyramid");
+  }
 
   function renderList() {
     const devs = sortedDevices();
