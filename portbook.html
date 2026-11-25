@@ -635,6 +635,87 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
 @media (min-width: 601px) { .save-btn .lbl-short { display: none; } }
 @media (max-height: 500px) and (orientation: landscape) { .save-btn .lbl-long { display: none; } .save-btn .lbl-short { display: inline; } }
 @media (min-width: 601px) and (max-width: 900px) { .save-btn .lbl-long { display: none; } .save-btn .lbl-short { display: inline; } }
+
+/* ---- floor plan (top view) ---- */
+.planview { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.plan-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.plan-floors { display: flex; gap: 4px; flex-wrap: wrap; }
+.pl-floorbtn { padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); cursor: pointer; font-weight: 600; font-family: var(--font-mono); }
+.pl-floorbtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.pl-addfloor { font-family: var(--font-body); color: var(--muted); border-style: dashed; }
+.plan-opts { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13px; color: var(--muted); }
+.plan-opts select { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+.plan-exp { display: inline-flex; gap: 4px; }
+.plan-tools { display: flex; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: thin; }
+.plan-tools button { flex: none; display: flex; align-items: center; gap: 5px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); cursor: pointer; font-size: 13px; color: var(--fg); white-space: nowrap; }
+.plan-tools button span { font-size: 15px; width: 16px; text-align: center; }
+.plan-tools button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.plan-body { display: grid; grid-template-columns: minmax(0, 1fr) 320px; }
+.plan-body[hidden] { display: none; }
+.plan-canvas { position: relative; min-width: 0; background: var(--bg); }
+#planSvg { display: block; width: 100%; height: min(72vh, 760px); min-height: 380px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+#planSvg.placing { cursor: crosshair; }
+#planZoom button[data-pz="fit"] { font-size: 12px; font-weight: 600; }
+.plan-readout { position: absolute; left: 10px; bottom: 10px; font-size: 12px; padding: 4px 8px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); color: var(--muted); pointer-events: none; }
+.plan-side { border-left: 1px solid var(--line); padding: 4px 14px 16px; overflow-y: auto; max-height: max(min(72vh, 760px), 380px); font-size: 13.5px; }
+.plan-side h3 { margin: 12px 0 8px; font-size: 16px; }
+.plan-side h4 { margin: 16px 0 6px; font-size: 12px; letter-spacing: .04em; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.pl-row { display: grid; grid-template-columns: 82px 1fr; gap: 8px; align-items: center; padding: 3px 0; }
+.pl-row label { font-weight: 600; font-size: 12.5px; color: var(--muted); }
+.pl-row input, .pl-row select { width: 100%; max-width: 180px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: 14px var(--font-mono); }
+.pl-row input#pl_u, .pl-row input#pl_kw { width: 80px; }
+.pl-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.pl-acts { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pl-note { color: var(--muted); font-size: 12px; margin: 4px 0; }
+.pl-devs, .pl-sum, .pl-checks, .pl-cables { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.pl-checks li { color: var(--down); }
+.pl-cables small { display: block; color: var(--muted); font-size: 11.5px; }
+.pl-badn { background: var(--down); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 11px; }
+.pl-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.pl-chips button { padding: 4px 10px; border: 1px dashed var(--muted); border-radius: 999px; background: var(--bg); cursor: pointer; font-family: var(--font-mono); font-size: 12.5px; color: var(--fg); }
+.pl-chips button[aria-pressed="true"] { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+.plan-hint { padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+#planSvg .pl-floor { fill: var(--panel); }
+#planSvg .pl-floor-edge { fill: none; stroke: var(--fg); stroke-width: 60; }
+#planSvg .pl-tile { stroke: var(--line); stroke-width: 8; }
+#planSvg .pl-tile5 { stroke: var(--muted); stroke-opacity: .45; stroke-width: 12; }
+#planSvg .pl-axis { font: 600 180px var(--font-mono); fill: var(--muted); text-anchor: middle; }
+#planSvg .pl-cold { fill: #2878e6; fill-opacity: .13; pointer-events: none; }
+#planSvg .pl-hot { fill: #e64632; fill-opacity: .13; pointer-events: none; }
+#planSvg .pl-obj { cursor: move; }
+#planSvg .pl-body { fill: var(--panel); stroke: var(--fg); stroke-width: 24; }
+#planSvg .pl-rack .pl-body { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 28; }
+#planSvg .pl-use { fill: var(--accent); fill-opacity: .22; pointer-events: none; }
+#planSvg .pl-front { stroke: var(--accent); stroke-width: 70; }
+#planSvg .pl-arrow { fill: none; stroke: var(--accent); stroke-width: 30; }
+#planSvg .pl-wall .pl-body { fill: var(--fg); fill-opacity: .75; }
+#planSvg .pl-column .pl-body { fill: var(--muted); }
+#planSvg .pl-hatch { stroke: var(--panel); stroke-width: 20; }
+#planSvg .pl-room .pl-body { fill: none; stroke: var(--muted); stroke-width: 30; stroke-dasharray: 200 120; }
+#planSvg .pl-tray .pl-body { fill: #a07828; fill-opacity: .14; stroke: #a07828; stroke-dasharray: 160 80; }
+#planSvg .pl-crac .pl-body { fill: var(--sw); fill-opacity: .18; stroke: var(--sw); }
+#planSvg .pl-ups .pl-body, #planSvg .pl-pdu .pl-body { fill: var(--warn-soft); stroke: var(--warn); }
+#planSvg .pl-label .pl-body { fill: transparent; stroke: none; }
+#planSvg .pl-door .pl-body { fill: var(--panel); }
+#planSvg .pl-swing { fill: none; stroke: var(--muted); stroke-width: 16; stroke-dasharray: 60 40; }
+#planSvg .pl-sel .pl-body { stroke: #f0a500; stroke-width: 60; }
+#planSvg .pl-bad .pl-body { stroke: var(--down); stroke-width: 50; stroke-dasharray: 120 60; }
+#planSvg text { pointer-events: none; }
+#planSvg .pl-name { font: 600 200px var(--font-body); text-anchor: middle; fill: var(--fg); }
+#planSvg .pl-sub { font: 140px var(--font-mono); text-anchor: middle; fill: var(--muted); }
+#planSvg .pl-roomname { font: 600 320px var(--font-body); fill: var(--muted); }
+#planSvg .pl-label { font: 600 260px var(--font-body); text-anchor: middle; fill: var(--fg); }
+#planSvg .pl-cable { fill: none; stroke: var(--ser); stroke-width: 30; stroke-dasharray: 120 80; pointer-events: none; }
+#planSvg .pl-cablelbl { font: 600 150px var(--font-mono); fill: var(--ser); paint-order: stroke; stroke: var(--panel); stroke-width: 30px; }
+#planSvg .pl-dim { font: 600 160px var(--font-mono); fill: #d08a00; text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 30px; }
+#planSvg .pl-meas { stroke: #d08a00; stroke-width: 30; stroke-dasharray: 90 60; }
+#planSvg .pl-measpt { fill: #d08a00; }
+@media (max-width: 900px) {
+  .plan-body { grid-template-columns: minmax(0, 1fr); }
+  .plan-side { border-left: 0; border-top: 1px solid var(--line); max-height: none; }
+  #planSvg { height: min(60vh, 620px); min-height: 320px; }
+}
+@media (max-height: 500px) and (orientation: landscape) { #planSvg { height: calc(100dvh - 60px); min-height: 240px; } }
 </style>
 
 <div class="wrap">
@@ -650,6 +731,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     <div class="viewtabs" role="tablist" aria-label="보기">
       <button type="button" role="tab" data-view="topo" aria-selected="true">토폴로지</button>
       <button type="button" role="tab" data-view="rack" aria-selected="false">랙</button>
+      <button type="button" role="tab" data-view="plan" aria-selected="false">평면도</button>
       <button type="button" role="tab" data-view="list" aria-selected="false">목록</button>
       <button type="button" role="tab" data-view="cli" aria-selected="false">CLI</button>
     </div>
@@ -703,6 +785,42 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     <div class="racks" id="racks"></div>
   </section>
 
+  <section class="planview" id="planView" hidden>
+    <div class="plan-bar">
+      <div class="plan-floors" id="planFloors" aria-label="층"></div>
+      <div class="plan-opts">
+        <label>격자 맞춤 <select id="planSnap"><option value="600">600 mm (타일)</option><option value="300">300 mm</option><option value="100">100 mm</option><option value="0">끄기</option></select></label>
+        <label class="toggle"><input type="checkbox" id="planAisle"> 냉·열 복도</label>
+        <label class="toggle"><input type="checkbox" id="planCable"> 케이블 경로</label>
+        <button class="btn sm" type="button" id="planUndo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
+        <span class="plan-exp" id="planExport"><button class="btn sm" type="button" data-pexp="dxf" title="AutoCAD 등에서 여는 도면">DXF 저장</button><button class="btn sm" type="button" data-pexp="svg">SVG 저장</button></span>
+      </div>
+    </div>
+    <div class="plan-tools" id="planTools" role="toolbar" aria-label="그리기 도구"></div>
+    <div class="empty" id="planEmpty" hidden><h3>층이 없습니다</h3><p>층을 추가하면 600 mm 바닥 타일 격자 위에 랙 줄, 벽, 기둥, 항온항습기, UPS, 케이블 트레이를 위에서 내려다본 도면으로 놓을 수 있습니다.</p><button class="btn primary" type="button" id="planAddFloor">+ 층 추가</button></div>
+    <div class="plan-body" id="planBody">
+      <div class="plan-canvas">
+        <svg id="planSvg" role="img" aria-label="평면도"></svg>
+        <div class="plan-readout mono" id="planReadout">X · Y · 타일</div>
+        <div class="zoombar" id="planZoom"><button type="button" data-pz="in" aria-label="확대">+</button><button type="button" data-pz="out" aria-label="축소">−</button><button type="button" data-pz="fit">맞춤</button></div>
+      </div>
+      <aside class="plan-side" id="planSide"></aside>
+    </div>
+    <div class="plan-hint" id="planHint">물체를 눌러 고르고 끌어서 옮깁니다. 빈 곳을 끌면 화면이 움직입니다. Shift+누르기로 여러 개 고르기.</div>
+  </section>
+  <dialog id="rowDlg"><form id="rowForm">
+    <div class="dlg-head">랙 줄 놓기</div>
+    <div class="dlg-body">
+      <div class="field"><label for="row_pre">줄 이름</label><input id="row_pre" value="A" maxlength="6"></div>
+      <div class="field"><label for="row_start">시작 번호</label><input id="row_start" inputmode="numeric" value="1"></div>
+      <div class="field"><label for="row_n">랙 개수</label><input id="row_n" inputmode="numeric" value="10"></div>
+      <div class="field"><label for="row_u">높이</label><select id="row_u"><option value="42" selected>42U</option><option value="45">45U</option><option value="47">47U</option><option value="48">48U</option><option value="24">24U</option></select></div>
+      <div class="field"><label for="row_size">랙 크기 (폭 × 깊이)</label><select id="row_size"><option value="600x1000">600 × 1000 mm</option><option value="600x1200" selected>600 × 1200 mm</option><option value="800x1000">800 × 1000 mm</option><option value="800x1200">800 × 1200 mm</option></select></div>
+      <div class="field"><label for="row_dir">앞면 방향</label><select id="row_dir"><option value="0">아래 (가로 줄)</option><option value="180">위 (가로 줄)</option><option value="90">왼쪽 (세로 줄)</option><option value="270">오른쪽 (세로 줄)</option></select></div>
+      <p class="full hint" style="margin:0;color:var(--muted);font-size:12px">이름은 A01, A02 …처럼 붙습니다. 앞면끼리 마주 보게 두 줄을 놓으면 그 사이가 냉복도가 됩니다(보통 1.2 m 이상).</p>
+    </div>
+    <div class="dlg-foot"><button class="btn" value="cancel" formnovalidate>취소</button><button class="btn primary" value="ok">놓기</button></div>
+  </form></dialog>
   <section class="topo" id="topo" hidden>
     <div class="topo-bar">
       <div class="palette" id="palette" aria-label="장비 팔레트"></div>
@@ -983,20 +1101,20 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   function natCmp(a, b) { return String(a).localeCompare(String(b), "en", { numeric: true, sensitivity: "base" }); }
 
   // ---------- state ----------
-  const state = { devices: [], ifaces: [], racks: [], selected: null, q: "", flash: null, view: "topo", showIp: true, loaded: { devices: false, interfaces: false } };
+  const state = { devices: [], ifaces: [], racks: [], floors: [], planobjs: [], selected: null, q: "", flash: null, view: "topo", showIp: true, loaded: { devices: false, interfaces: false } };
   const clampS = (v, lo, hi, d) => { v = parseFloat(v); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
   state.boxScale = 1; state.iconScale = 1;
   try { state.boxScale = clampS(localStorage.getItem("portbook.boxScale"), 0.5, 1.6, 1); state.iconScale = clampS(localStorage.getItem("portbook.iconScale"), 0.5, 2, 1); } catch (e) {}
   try { state.showIp = localStorage.getItem("portbook.showIp") !== "0"; state.rackMode = localStorage.getItem("portbook.rackMode") || "panel"; } catch (e) {}
-  try { state.selected = localStorage.getItem("portbook.sel"); state.view = ["list", "rack", "cli"].includes(localStorage.getItem("portbook.view")) ? localStorage.getItem("portbook.view") : "topo"; } catch (e) {}
+  try { state.selected = localStorage.getItem("portbook.sel"); state.view = ["list", "rack", "plan", "cli"].includes(localStorage.getItem("portbook.view")) ? localStorage.getItem("portbook.view") : "topo"; } catch (e) {}
 
   // ---------- storage (db, or this-browser fallback) ----------
   let store = null;
   const localStore = () => {
-    let data = { devices: {}, interfaces: {}, racks: {} };
+    let data = { devices: {}, interfaces: {}, racks: {}, floors: {}, planobjs: {} };
     try { data = JSON.parse(localStorage.getItem("portbook.local")) || data; } catch (e) {}
-    data.racks ||= {};
-    const subs = { devices: [], interfaces: [], racks: [] };
+    data.racks ||= {}; data.floors ||= {}; data.planobjs ||= {};
+    const subs = { devices: [], interfaces: [], racks: [], floors: [], planobjs: [] };
     const emit = c => subs[c].forEach(fn => fn(Object.entries(data[c]).map(([id, v]) => ({ id, ...v }))));
     const persist = () => { try { localStorage.setItem("portbook.local", JSON.stringify(data)); } catch (e) {} };
     return {
@@ -1043,12 +1161,16 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       store.watch("devices", (rows, meta) => { state.devices = rows; if (!meta.fromCache) state.loaded.devices = true; done(); render(); }, onErr);
       store.watch("interfaces", (rows, meta) => { state.ifaces = rows; if (!meta.fromCache) state.loaded.interfaces = true; done(); render(); }, onErr);
       store.watch("racks", rows => { state.racks = rows; render(); }, onErr);
+      store.watch("floors", rows => { state.floors = rows; render(); }, onErr);
+      store.watch("planobjs", rows => { state.planobjs = rows; render(); }, onErr);
     } else {
       store = localStore();
       setStatus("warn", "이 브라우저에만 저장됩니다. 다른 기기나 다른 사람과는 공유되지 않습니다. 파일 → 내보내기로 백업할 수 있습니다.");
       store.watch("devices", rows => { state.devices = rows; state.loaded.devices = true; render(); });
       store.watch("interfaces", rows => { state.ifaces = rows; state.loaded.interfaces = true; render(); });
       store.watch("racks", rows => { state.racks = rows; render(); });
+      store.watch("floors", rows => { state.floors = rows; render(); });
+      store.watch("planobjs", rows => { state.planobjs = rows; render(); });
     }
   }
 
@@ -1073,9 +1195,10 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     : '<svg viewBox="0 0 18 12"><rect x="1" y="2.5" width="16" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4 6h1.5M7 6h1.5M10 6h1.5M13 6h1.5" stroke="currentColor" stroke-width="1.6"/></svg>';
 
   function render() {
-    const topo = state.view === "topo", rack = state.view === "rack", cliV = state.view === "cli";
-    $(".grid").hidden = topo || rack || cliV; $("#topo").hidden = !topo; $("#rackView").hidden = !rack; $("#cliView").hidden = !cliV;
+    const topo = state.view === "topo", rack = state.view === "rack", cliV = state.view === "cli", plan = state.view === "plan";
+    $(".grid").hidden = topo || rack || cliV || plan; $("#topo").hidden = !topo; $("#rackView").hidden = !rack; $("#cliView").hidden = !cliV; $("#planView").hidden = !plan;
     if (rack) renderRacks();
+    if (plan) renderPlan();
     if (cliV) renderCliView();
     if ($("#ptDlg")?.open) renderPt();
     document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === state.view)));
@@ -1083,6 +1206,452 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     if (topo) renderTopo();
     renderDoneChip();
   }
+
+  // ---------- floor plan: a top view in millimetres, one drawing per floor ----------
+  // Racks placed on a floor keep their plan fields on the rack itself (floorId, px, py = centre, fw × fd, rot);
+  // walls, columns, cooling, power, trays, rooms and text live in "planobjs". Rotation is clockwise; at 0 a rack's
+  // front faces down the screen (+y).
+  const PL = { floor: null, tool: "select", sel: new Set(), vb: null, snap: 600, aisle: true, cable: true, undo: [], measure: null, drag: null, pts: new Map(), placeRack: null, fitNext: true };
+  try { PL.floor = localStorage.getItem("portbook.floor"); PL.snap = +(localStorage.getItem("portbook.snap") || 600); PL.aisle = localStorage.getItem("portbook.aisle") !== "0"; PL.cable = localStorage.getItem("portbook.pcable") !== "0"; } catch (e) {}
+  const PTYPES = {
+    rack: { label: "랙", w: 600, d: 1200, solid: true },
+    wall: { label: "벽", w: 3000, d: 200, solid: true },
+    column: { label: "기둥", w: 600, d: 600, solid: true },
+    door: { label: "문", w: 1200, d: 200, solid: false },
+    crac: { label: "항온항습기", w: 2400, d: 900, solid: true },
+    ups: { label: "UPS", w: 1200, d: 800, solid: true },
+    pdu: { label: "분전반", w: 600, d: 800, solid: true },
+    tray: { label: "케이블 트레이", w: 3000, d: 300, solid: false },
+    room: { label: "공간", w: 6000, d: 6000, solid: false },
+    label: { label: "글자", w: 2400, d: 600, solid: false }
+  };
+  const PTOOLS = [["select", "선택", "↖"], ["row", "랙 줄", "▥"], ["rack", "랙", "▯"], ["wall", "벽", "▬"], ["column", "기둥", "■"], ["door", "문", "◜"], ["crac", "항온항습기", "❄"], ["ups", "UPS", "⚡"], ["pdu", "분전반", "⊟"], ["tray", "트레이", "┅"], ["room", "공간", "⬚"], ["label", "글자", "T"], ["measure", "측정", "↔"]];
+  const RACK_SIZES = [[600, 1000], [600, 1200], [800, 1000], [800, 1200]];
+  const CABLE_STD = [1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 70, 100];
+  const sortedFloors = () => [...state.floors].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || natCmp(a.name, b.name));
+  const curFloor = () => { const fs = sortedFloors(); return fs.find(f => f.id === PL.floor) || fs[0] || null; };
+  const colName = i => { let s = ""; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+  const tileOf = (f, x, y) => { const t = f.tile || 600; return x < 0 || y < 0 || x > f.w || y > f.h ? "바닥 밖" : colName(Math.floor(x / t)) + String(Math.floor(y / t) + 1).padStart(2, "0"); };
+  const mm = v => (Math.round(v) / 1000).toLocaleString("ko-KR", { maximumFractionDigits: 2 }) + " m";
+  function planItems(fid) {
+    return [
+      ...state.racks.filter(r => r.floorId === fid && Number.isFinite(r.px)).map(r => ({ col: "racks", id: r.id, type: "rack", name: r.name, x: r.px, y: r.py, w: r.fw || 600, d: r.fd || 1200, rot: r.rot || 0, doc: r })),
+      ...state.planobjs.filter(o => o.floorId === fid && PTYPES[o.type]).map(o => ({ col: "planobjs", id: o.id, type: o.type, name: o.name || "", x: o.x, y: o.y, w: o.w, d: o.d, rot: o.rot || 0, doc: o }))
+    ];
+  }
+  const keyOf = it => it.col + ":" + it.id;
+  const dims = it => (it.rot % 180 ? { W: it.d, D: it.w } : { W: it.w, D: it.d });
+  const bbox = it => { const { W, D } = dims(it); return { x1: it.x - W / 2, y1: it.y - D / 2, x2: it.x + W / 2, y2: it.y + D / 2 }; };
+  const frontVec = rot => [[0, 1], [-1, 0], [0, -1], [1, 0]][((rot % 360) + 360) % 360 / 90 | 0];
+  const overlap = (a, b, tol = 10) => a.x1 < b.x2 - tol && b.x1 < a.x2 - tol && a.y1 < b.y2 - tol && b.y1 < a.y2 - tol;
+  // the strip of floor in front of (or behind) a rack, `depth` mm deep
+  function aisleStrip(it, depth, back) {
+    const b = bbox(it), [fx, fy] = frontVec(it.rot).map(v => back ? -v : v);
+    if (fy > 0) return { x1: b.x1, y1: b.y2, x2: b.x2, y2: b.y2 + depth };
+    if (fy < 0) return { x1: b.x1, y1: b.y1 - depth, x2: b.x2, y2: b.y1 };
+    if (fx > 0) return { x1: b.x2, y1: b.y1, x2: b.x2 + depth, y2: b.y2 };
+    return { x1: b.x1 - depth, y1: b.y1, x2: b.x1, y2: b.y2 };
+  }
+  const rackUse = rk => inRack(rk.id).reduce((a, d) => a + (d.rackH || 1), 0);
+  // problems a data-centre layout should not have
+  function planChecks(f, items) {
+    const out = [], bad = new Set(), solid = items.filter(it => PTYPES[it.type].solid);
+    for (let i = 0; i < solid.length; i++) for (let j = i + 1; j < solid.length; j++) if (overlap(bbox(solid[i]), bbox(solid[j]))) { out.push(`${solid[i].name || PTYPES[solid[i].type].label}와(과) ${solid[j].name || PTYPES[solid[j].type].label}이(가) 겹칩니다.`); bad.add(keyOf(solid[i])); bad.add(keyOf(solid[j])); }
+    for (const it of items) { const b = bbox(it); if (b.x1 < -10 || b.y1 < -10 || b.x2 > f.w + 10 || b.y2 > f.h + 10) { out.push(`${it.name || PTYPES[it.type].label}이(가) 바닥 밖으로 나갑니다.`); bad.add(keyOf(it)); } }
+    for (const it of items.filter(x => x.type === "rack")) {
+      const fr = aisleStrip(it, 1200, false), bk = aisleStrip(it, 900, true);
+      const hitF = solid.find(o => o !== it && overlap(fr, bbox(o))), hitB = solid.find(o => o !== it && overlap(bk, bbox(o)));
+      if (hitF) { out.push(`${it.name} 앞쪽 통로가 1.2 m보다 좁습니다 (${hitF.name || PTYPES[hitF.type].label}).`); bad.add(keyOf(it)); }
+      if (hitB) { out.push(`${it.name} 뒤쪽 통로가 0.9 m보다 좁습니다 (${hitB.name || PTYPES[hitB.type].label}).`); bad.add(keyOf(it)); }
+    }
+    return { out, bad };
+  }
+  // cables between devices in different racks of this floor: an L-shaped run through the overhead tray
+  function planCables(f, items) {
+    const byRack = new Map(items.filter(i => i.type === "rack").map(i => [i.id, i])), pairs = new Map(), other = [];
+    for (const l of links()) {
+      const a = state.devices.find(d => d.id === l.aDev), b = state.devices.find(d => d.id === l.bDev);
+      if (!a?.rackId || !b?.rackId || a.rackId === b.rackId) continue;
+      const ra = byRack.get(a.rackId), rb = byRack.get(b.rackId);
+      if (!ra && !rb) continue;
+      if (!ra || !rb) { other.push(`${a.name} ↔ ${b.name}`); continue; }
+      const k = [ra.id, rb.id].sort().join("|"); if (!pairs.has(k)) pairs.set(k, { a: ra, b: rb, n: 0, names: [] });
+      const p = pairs.get(k); p.n++; p.names.push(`${a.name} ${abbr(l.a.name)} ↔ ${b.name} ${l.b ? abbr(l.b.name) : ""}`);
+    }
+    for (const p of pairs.values()) {
+      const run = Math.abs(p.a.x - p.b.x) + Math.abs(p.a.y - p.b.y);
+      p.len = run / 1000 + 2 * 2.2 + 1;   // across the floor, up to the tray and down again on both ends, plus slack
+      p.std = CABLE_STD.find(v => v >= p.len) || Math.ceil(p.len);
+    }
+    return { pairs: [...pairs.values()].sort((x, y) => y.len - x.len), other };
+  }
+  // ---- drawing
+  function planMarkup(f, items, opts = {}) {
+    const t = f.tile || 600, cols = Math.ceil(f.w / t), rows = Math.ceil(f.h / t), sel = opts.sel || new Set(), bad = opts.bad || new Set();
+    let g = `<rect class="pl-floor" x="0" y="0" width="${f.w}" height="${f.h}"/>`;
+    let grid = "";
+    for (let i = 0; i <= cols; i++) { const x = Math.min(i * t, f.w); grid += `<line class="${i % 5 ? "pl-tile" : "pl-tile5"}" x1="${x}" y1="0" x2="${x}" y2="${f.h}"/>`; }
+    for (let j = 0; j <= rows; j++) { const y = Math.min(j * t, f.h); grid += `<line class="${j % 5 ? "pl-tile" : "pl-tile5"}" x1="0" y1="${y}" x2="${f.w}" y2="${y}"/>`; }
+    for (let i = 0; i < cols; i++) grid += `<text class="pl-axis" x="${i * t + t / 2}" y="-160">${colName(i)}</text>`;
+    for (let j = 0; j < rows; j++) grid += `<text class="pl-axis" x="-200" y="${j * t + t / 2 + 60}">${j + 1}</text>`;
+    g += grid + `<rect class="pl-floor-edge" x="0" y="0" width="${f.w}" height="${f.h}"/>`;
+    const racks = items.filter(i => i.type === "rack");
+    if (opts.aisle) for (const it of racks) { const c = aisleStrip(it, 1200, false), h = aisleStrip(it, 900, true); g += `<rect class="pl-cold" x="${c.x1}" y="${c.y1}" width="${c.x2 - c.x1}" height="${c.y2 - c.y1}"/><rect class="pl-hot" x="${h.x1}" y="${h.y1}" width="${h.x2 - h.x1}" height="${h.y2 - h.y1}"/>`; }
+    const order = ["room", "tray", "label", "wall", "door", "column", "crac", "ups", "pdu", "rack"];
+    for (const it of [...items].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))) {
+      const { w, d } = it, k = keyOf(it), cls = `pl-obj pl-${it.type}${sel.has(k) ? " pl-sel" : ""}${bad.has(k) ? " pl-bad" : ""}`;
+      let body = "";
+      if (it.type === "rack") {
+        const rk = it.doc, used = rackUse(rk), H = rk.height || 42, pct = Math.min(1, used / H);
+        body = `<rect class="pl-body" x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}"/><rect class="pl-use" x="${-w / 2}" y="${d / 2 - d * pct}" width="${w}" height="${d * pct}"/>`
+          + `<line class="pl-front" x1="${-w / 2}" y1="${d / 2}" x2="${w / 2}" y2="${d / 2}"/><path class="pl-arrow" d="M${-w * 0.18},${d / 2 - 150} L0,${d / 2 - 40} L${w * 0.18},${d / 2 - 150}"/>`;
+      } else if (it.type === "door") {
+        body = `<rect class="pl-body" x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}"/><path class="pl-swing" d="M${-w / 2},${d / 2} A${w},${w} 0 0 0 ${w / 2},${d / 2 - w}"/>`;
+      } else if (it.type === "column") {
+        body = `<rect class="pl-body" x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}"/><path class="pl-hatch" d="M${-w / 2},${-d / 2} L${w / 2},${d / 2} M${w / 2},${-d / 2} L${-w / 2},${d / 2}"/>`;
+      } else if (it.type === "label") body = `<rect class="pl-body" x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}"/>`;
+      else body = `<rect class="pl-body" x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}"/>`;
+      g += `<g class="${cls}" data-pi="${esc(k)}" transform="translate(${it.x} ${it.y}) rotate(${it.rot})">${body}</g>`;
+      // texts stay upright whatever the rotation
+      const b = bbox(it), fs = Math.max(140, Math.min(260, Math.min(b.x2 - b.x1, b.y2 - b.y1) * 0.32));
+      if (it.type === "rack") {
+        const rk = it.doc, used = rackUse(rk), H = rk.height || 42;
+        g += `<text class="pl-name" x="${it.x}" y="${it.y - 20}" style="font-size:${fs}px">${esc(it.name)}</text><text class="pl-sub" x="${it.x}" y="${it.y + fs * 0.95}" style="font-size:${fs * 0.72}px">${used}/${H}U${rk.kw ? " · " + rk.kw + "kW" : ""}</text>`;
+      } else if (it.type === "room") g += `<text class="pl-roomname" x="${b.x1 + 200}" y="${b.y1 + 420}">${esc(it.name || "공간")}</text>`;
+      else if (it.type === "label") g += `<text class="pl-label" x="${it.x}" y="${it.y + 110}">${esc(it.name || "글자")}</text>`;
+      else if (!["wall", "door", "tray"].includes(it.type) || it.name) g += `<text class="pl-name" x="${it.x}" y="${it.y + fs * 0.35}" style="font-size:${fs * 0.9}px">${esc(it.name || PTYPES[it.type].label)}</text>`;
+    }
+    if (opts.cable && opts.cables) for (const p of opts.cables.pairs) {
+      const a = p.a, b = p.b, mid = { x: b.x, y: a.y };
+      g += `<path class="pl-cable" d="M${a.x},${a.y} L${mid.x},${mid.y} L${b.x},${b.y}"/><text class="pl-cablelbl" x="${mid.x + 120}" y="${mid.y - 120}">${p.n}가닥 · ${p.std}m</text>`;
+    }
+    if (opts.sel?.size === 1) {   // dimensions of the selected object
+      const it = items.find(i => sel.has(keyOf(i)));
+      if (it) { const b = bbox(it); g += `<text class="pl-dim" x="${(b.x1 + b.x2) / 2}" y="${b.y1 - 120}">${Math.round(b.x2 - b.x1)}</text><text class="pl-dim" x="${b.x2 + 140}" y="${(b.y1 + b.y2) / 2}" transform="rotate(90 ${b.x2 + 140} ${(b.y1 + b.y2) / 2})">${Math.round(b.y2 - b.y1)}</text>`; }
+    }
+    if (opts.measure?.a) { const { a, b } = opts.measure, e = b || a; g += `<line class="pl-meas" x1="${a.x}" y1="${a.y}" x2="${e.x}" y2="${e.y}"/><circle class="pl-measpt" cx="${a.x}" cy="${a.y}" r="70"/>${b ? `<circle class="pl-measpt" cx="${b.x}" cy="${b.y}" r="70"/><text class="pl-dim pl-measlbl" x="${(a.x + b.x) / 2}" y="${(a.y + b.y) / 2 - 140}">${mm(Math.hypot(b.x - a.x, b.y - a.y))} (가로 ${mm(Math.abs(b.x - a.x))}, 세로 ${mm(Math.abs(b.y - a.y))})</text>` : ""}`; }
+    return g;
+  }
+  // ---- view box, pointer and keyboard
+  const psvg = $("#planSvg");
+  function planFit(f) { const m = 1800; PL.vb = [-m, -m, f.w + 2 * m, f.h + 2 * m]; }
+  function planPt(e) { const M = psvg.getScreenCTM(); if (!M) return { x: 0, y: 0 }; const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(M.inverse()); return { x: p.x, y: p.y }; }
+  const snapV = v => PL.snap ? Math.round(v / PL.snap) * PL.snap : Math.round(v);
+  // place so the footprint's corner lands on the grid (racks sit on whole tiles)
+  function snapItem(it, x, y) {
+    if (!PL.snap) return { x: Math.round(x), y: Math.round(y) };
+    const { W, D } = dims(it); return { x: snapV(x - W / 2) + W / 2, y: snapV(y - D / 2) + D / 2 };
+  }
+  function renderPlanSvg() {
+    const f = curFloor(); if (!f) return;
+    if (!PL.vb || PL.fitNext) { planFit(f); PL.fitNext = false; }
+    const items = planItems(f.id), chk = planChecks(f, items), cab = planCables(f, items);
+    psvg.setAttribute("viewBox", PL.vb.join(" "));
+    psvg.innerHTML = planMarkup(f, items, { sel: PL.sel, bad: chk.bad, aisle: PL.aisle, cable: PL.cable, cables: cab, measure: PL.measure });
+    psvg.classList.toggle("placing", PL.tool !== "select");
+    return { items, chk, cab };
+  }
+  function renderPlan() {
+    const fs = sortedFloors(), f = curFloor();
+    $("#planFloors").innerHTML = fs.map(x => `<button type="button" class="pl-floorbtn" data-floor="${esc(x.id)}" aria-pressed="${x.id === f?.id}">${esc(x.name)}</button>`).join("") + `<button type="button" class="pl-floorbtn pl-addfloor" data-floor="+">+ 층</button>`;
+    $("#planTools").innerHTML = PTOOLS.map(([k, l, ic]) => `<button type="button" data-ptool="${k}" aria-pressed="${PL.tool === k}" title="${l}"><span aria-hidden="true">${ic}</span>${l}</button>`).join("");
+    $("#planSnap").value = String(PL.snap); $("#planAisle").checked = PL.aisle; $("#planCable").checked = PL.cable;
+    $("#planUndo").disabled = !PL.undo.length;
+    $("#planEmpty").hidden = !!f; $("#planBody").hidden = !f;
+    if (!f) return;
+    const r = renderPlanSvg();
+    renderPlanSide(f, r);
+  }
+  function planReadout(e) {
+    const f = curFloor(); if (!f) return;
+    const p = planPt(e);
+    $("#planReadout").textContent = `X ${mm(p.x)} · Y ${mm(p.y)} · 타일 ${tileOf(f, p.x, p.y)}${PL.measure?.a && !PL.measure.b ? ` · 거리 ${mm(Math.hypot(p.x - PL.measure.a.x, p.y - PL.measure.a.y))}` : ""}`;
+  }
+  // ---- side panel
+  function renderPlanSide(f, r) {
+    const side = $("#planSide"), items = r.items, sel = items.filter(it => PL.sel.has(keyOf(it)));
+    const row = (label, ctrl) => `<div class="pl-row"><label>${label}</label><div>${ctrl}</div></div>`;
+    if (document.activeElement && side.contains(document.activeElement) && document.activeElement.matches("input,select")) return;   // do not redraw under the cursor
+    if (sel.length === 1) {
+      const it = sel[0], b = bbox(it), isRack = it.type === "rack", rk = isRack ? it.doc : null;
+      const devs = isRack ? inRack(rk.id).sort((x, y) => (y.rackU || 0) - (x.rackU || 0)) : [];
+      side.innerHTML = `<h3>${esc(PTYPES[it.type].label)}${it.name ? " · " + esc(it.name) : ""}</h3>`
+        + row(isRack ? "랙 이름" : "이름", `<input id="pl_name" value="${esc(it.name)}" placeholder="${esc(PTYPES[it.type].label)}">`)
+        + row("위치", `<span class="mono">${tileOf(f, b.x1 + 1, b.y1 + 1)} 타일 · 왼쪽 위 X ${mm(b.x1)}, Y ${mm(b.y1)}</span>`)
+        + row("X (m)", `<input id="pl_x" inputmode="decimal" value="${(b.x1 / 1000).toFixed(2)}">`) + row("Y (m)", `<input id="pl_y" inputmode="decimal" value="${(b.y1 / 1000).toFixed(2)}">`)
+        + (isRack ? row("크기", `<select id="pl_size">${RACK_SIZES.map(([w, d]) => `<option value="${w}x${d}"${it.w === w && it.d === d ? " selected" : ""}>${w} × ${d} mm</option>`).join("")}</select>`)
+          + row("높이", `<input id="pl_u" inputmode="numeric" value="${rk.height || 42}"> U`) + row("설계 전력", `<input id="pl_kw" inputmode="decimal" value="${esc(rk.kw ?? "")}" placeholder="예: 5"> kW`)
+          : row("가로 (mm)", `<input id="pl_w" inputmode="numeric" value="${it.w}">`) + row("세로 (mm)", `<input id="pl_d" inputmode="numeric" value="${it.d}">`))
+        + row("방향", `<div class="pl-btns"><button type="button" class="btn sm" data-pl="rotl">⟲ 90°</button><button type="button" class="btn sm" data-pl="rotr">⟳ 90°</button><span class="pl-note">${isRack ? "앞면: " + ["아래", "왼쪽", "위", "오른쪽"][((it.rot % 360) + 360) % 360 / 90 | 0] : it.rot + "°"}</span></div>`)
+        + (isRack ? `<h4>장비 ${devs.length}대 · ${rackUse(rk)}/${rk.height || 42}U 사용</h4>` + (devs.length ? `<ul class="pl-devs">${devs.map(d => `<li><span class="mono">U${d.rackU}${(d.rackH || 1) > 1 ? "–" + (d.rackU + d.rackH - 1) : ""}</span> ${esc(d.name)}</li>`).join("")}</ul>` : `<p class="pl-note">비어 있습니다. 랙 탭에서 장비를 넣으세요.</p>`)
+          + `<div class="pl-btns"><button type="button" class="btn sm" data-pl="openrack">랙 탭에서 보기</button></div>` : "")
+        + `<div class="pl-btns pl-acts"><button type="button" class="btn sm" data-pl="dup">복제</button><button type="button" class="btn sm danger" data-pl="del">${isRack ? "평면도에서 빼기" : "삭제"}</button></div>`;
+      return;
+    }
+    if (sel.length > 1) {
+      side.innerHTML = `<h3>${sel.length}개 선택</h3><p class="pl-note">끌면 함께 움직입니다. 방향키로 한 칸씩 옮길 수 있습니다.</p>`
+        + `<div class="pl-btns"><button type="button" class="btn sm" data-pl="alignx">가로 줄 맞춤</button><button type="button" class="btn sm" data-pl="aligny">세로 줄 맞춤</button><button type="button" class="btn sm" data-pl="rotr">⟳ 90°</button></div>`
+        + `<div class="pl-btns pl-acts"><button type="button" class="btn sm" data-pl="dup">복제</button><button type="button" class="btn sm danger" data-pl="del">삭제</button></div>`;
+      return;
+    }
+    const racks = items.filter(i => i.type === "rack"), U = racks.reduce((a, i) => a + (i.doc.height || 42), 0), used = racks.reduce((a, i) => a + rackUse(i.doc), 0), kw = racks.reduce((a, i) => a + (+i.doc.kw || 0), 0);
+    const loose = sortedRacks().filter(rk => !rk.floorId || !state.floors.some(x => x.id === rk.floorId) || !Number.isFinite(rk.px));
+    side.innerHTML = `<h3>${esc(f.name)}</h3>`
+      + row("층 이름", `<input id="pl_fname" value="${esc(f.name)}">`) + row("가로 (m)", `<input id="pl_fw" inputmode="decimal" value="${f.w / 1000}">`) + row("세로 (m)", `<input id="pl_fh" inputmode="decimal" value="${f.h / 1000}">`)
+      + row("바닥 타일", `<select id="pl_ftile">${[600, 500, 1000].map(v => `<option value="${v}"${(f.tile || 600) === v ? " selected" : ""}>${v} mm</option>`).join("")}</select>`)
+      + `<h4>요약</h4><ul class="pl-sum"><li>랙 <b>${racks.length}</b>대 · U <b>${used}/${U}</b>${U ? ` (${Math.round(used / U * 100)}%)` : ""}</li><li>설계 전력 합계 <b>${Math.round(kw * 10) / 10}</b> kW${racks.length ? ` · 랙당 평균 ${Math.round(kw / racks.length * 10) / 10} kW` : ""}</li><li>바닥 ${mm(f.w)} × ${mm(f.h)} = ${Math.round(f.w * f.h / 1e6)} m²</li></ul>`
+      + (loose.length ? `<h4>평면도에 없는 랙 ${loose.length}개</h4><div class="pl-chips">${loose.map(rk => `<button type="button" data-placerack="${esc(rk.id)}" aria-pressed="${PL.placeRack === rk.id}">${esc(rk.name)}</button>`).join("")}</div><p class="pl-note">누른 뒤 도면을 누르면 그 자리에 놓입니다.</p>` : "")
+      + `<h4>점검 ${r.chk.out.length ? `<span class="pl-badn">${r.chk.out.length}</span>` : "✓"}</h4>` + (r.chk.out.length ? `<ul class="pl-checks">${r.chk.out.slice(0, 40).map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : `<p class="pl-note">겹침, 통로 폭(앞 1.2 m · 뒤 0.9 m), 바닥 밖 문제가 없습니다.</p>`)
+      + `<h4>랙 간 케이블 ${r.cab.pairs.length ? r.cab.pairs.reduce((a, p) => a + p.n, 0) + "가닥" : ""}</h4>` + (r.cab.pairs.length ? `<ul class="pl-cables">${r.cab.pairs.slice(0, 40).map(p => `<li><b>${esc(p.a.name)} ↔ ${esc(p.b.name)}</b> ${p.n}가닥 · 약 ${p.len.toFixed(1)} m → <b>${p.std} m</b><small>${esc(p.names.slice(0, 3).join(", "))}${p.names.length > 3 ? " 외" : ""}</small></li>`).join("")}</ul><p class="pl-note">길이 = 랙 사이 가로·세로 거리 + 양쪽 상부 트레이 오르내림 2.2 m씩 + 여유 1 m</p>` : `<p class="pl-note">서로 다른 랙에 있는 장비 사이의 케이블이 여기 나옵니다.</p>`)
+      + (r.cab.other.length ? `<p class="pl-note">다른 층과 이어진 케이블 ${r.cab.other.length}개: ${esc(r.cab.other.slice(0, 5).join(", "))}${r.cab.other.length > 5 ? " 외" : ""}</p>` : "")
+      + `<div class="pl-btns pl-acts"><button type="button" class="btn sm danger" data-pl="delfloor">층 삭제</button></div>`;
+  }
+  // ---- saving with undo
+  function docPatch(it, p) { return it.col === "racks" ? Object.fromEntries(Object.entries(p).map(([k, v]) => [{ x: "px", y: "py", w: "fw", d: "fd" }[k] || k, v])) : p; }
+  async function planSave(changes, label) {
+    // changes: [{ col, id, body | null (delete) }]
+    const undo = changes.map(c => { const cur = (c.col === "racks" ? state.racks : c.col === "planobjs" ? state.planobjs : state.floors).find(x => x.id === c.id); return { col: c.col, id: c.id, before: cur ? JSON.parse(JSON.stringify(strip(cur))) : null }; });
+    PL.undo.push({ label, undo }); if (PL.undo.length > 60) PL.undo.shift();
+    try { for (const c of changes) c.body ? await store.save(c.col, c.id, c.body) : await store.remove(c.col, c.id); } catch (e) { writeErr(e); }
+  }
+  async function planUndo() {
+    const u = PL.undo.pop(); if (!u) return;
+    try { for (const c of u.undo) c.before ? await store.save(c.col, c.id, c.before) : await store.remove(c.col, c.id); toast(`되돌렸습니다: ${u.label}`); } catch (e) { writeErr(e); }
+    PL.sel.clear(); render();
+  }
+  const itBody = (it, p) => {
+    const body = { ...strip(it.doc), ...docPatch(it, p), updatedAt: new Date().toISOString() }, f = curFloor();
+    if (it.col === "racks" && f) { const n = { ...it, ...p }, { W, D } = dims(n); body.location = `${f.name} ${tileOf(f, n.x - W / 2 + 1, n.y - D / 2 + 1)}`; }
+    return body;
+  };
+  async function planAdd(type, x, y, extra = {}) {
+    const f = curFloor(); if (!f) return;
+    const T = PTYPES[type], id = store.newId();
+    if (type === "rack") {
+      const n = sortedRacks().length + 1; let name = extra.name || `R${String(n).padStart(2, "0")}`; while (state.racks.some(r => r.name.toLowerCase() === name.toLowerCase())) name += "-1";
+      const it = { type, w: extra.w || T.w, d: extra.d || T.d, rot: extra.rot || 0 }, p = snapItem(it, x, y);
+      await planSave([{ col: "racks", id, body: { name, height: extra.height || 42, location: `${f.name} ${tileOf(f, p.x - dims(it).W / 2 + 1, p.y - dims(it).D / 2 + 1)}`, order: Date.now(), floorId: f.id, px: p.x, py: p.y, fw: it.w, fd: it.d, rot: it.rot } }], "랙 추가");
+    } else {
+      const it = { type, w: T.w, d: T.d, rot: 0 }, p = snapItem(it, x, y);
+      await planSave([{ col: "planobjs", id, body: { floorId: f.id, type, name: type === "label" ? "글자" : type === "room" ? "공간" : "", x: p.x, y: p.y, w: T.w, d: T.d, rot: 0 } }], PTYPES[type].label + " 추가");
+    }
+    PL.sel = new Set([(type === "rack" ? "racks:" : "planobjs:") + id]);
+  }
+  // a row of racks: A01, A02, … side by side, fronts facing one way
+  async function planAddRow(x, y, o) {
+    const f = curFloor(); if (!f) return;
+    const along = o.rot % 180 === 0, ch = [], { w, d } = o, step = w;
+    for (let k = 0; k < o.n; k++) {
+      const it = { type: "rack", w, d, rot: o.rot }, { W, D } = dims(it);
+      const cx = along ? x + k * step + W / 2 : x + W / 2, cy = along ? y + D / 2 : y + k * step + D / 2, p = snapItem(it, cx, cy);
+      let name = `${o.prefix}${String(o.start + k).padStart(2, "0")}`; while (state.racks.some(r => r.name.toLowerCase() === name.toLowerCase()) || ch.some(c => c.body.name === name)) name += "-1";
+      ch.push({ col: "racks", id: store.newId(), body: { name, height: o.u, location: `${f.name} ${tileOf(f, p.x - W / 2 + 1, p.y - D / 2 + 1)}`, order: Date.now() + k, floorId: f.id, px: p.x, py: p.y, fw: w, fd: d, rot: o.rot } });
+    }
+    await planSave(ch, `랙 줄 ${o.prefix}`);
+    PL.sel = new Set(ch.map(c => "racks:" + c.id)); toast(`${o.prefix} 줄 랙 ${o.n}대를 놓았습니다.`);
+  }
+  async function planDelete(items) {
+    if (!items.length) return;
+    const racks = items.filter(i => i.type === "rack");
+    if (racks.length && !await confirmBox("평면도에서 빼기", `랙 ${racks.length}개(${racks.slice(0, 5).map(r => r.name).join(", ")}${racks.length > 5 ? " 외" : ""})를 평면도에서 뺍니다. 랙과 안의 장비는 랙 탭에 그대로 남습니다.${items.length > racks.length ? ` 다른 물체 ${items.length - racks.length}개는 지웁니다.` : ""}`, "빼기")) return;
+    await planSave(items.map(it => it.col === "racks" ? { col: "racks", id: it.id, body: { ...strip(it.doc), floorId: "", px: null, py: null } } : { col: it.col, id: it.id, body: null }), "삭제");
+    PL.sel.clear(); render();
+  }
+  async function planDup(items) {
+    const f = curFloor(); if (!f || !items.length) return;
+    const off = PL.snap || 600, ch = [];
+    for (const it of items) {
+      if (it.type === "rack") { let name = it.name + "-2"; while (state.racks.some(r => r.name.toLowerCase() === name.toLowerCase()) || ch.some(c => c.body.name === name)) name += "2"; ch.push({ col: "racks", id: store.newId(), body: { name, height: it.doc.height || 42, kw: it.doc.kw, location: f.name, order: Date.now(), floorId: f.id, px: it.x + off, py: it.y + off, fw: it.w, fd: it.d, rot: it.rot } }); }
+      else ch.push({ col: "planobjs", id: store.newId(), body: { ...strip(it.doc), x: it.x + off, y: it.y + off } });
+    }
+    await planSave(ch, "복제"); PL.sel = new Set(ch.map(c => c.col + ":" + c.id)); render();
+  }
+  async function planRotate(items, deg) {
+    await planSave(items.map(it => ({ col: it.col, id: it.id, body: itBody(it, { rot: ((it.rot + deg) % 360 + 360) % 360 }) })), "회전");
+  }
+  // ---- pointer: select / drag / pan / pinch / place / measure
+  psvg.addEventListener("pointerdown", e => {
+    const f = curFloor(); if (!f) return;
+    psvg.setPointerCapture(e.pointerId); PL.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (PL.pts.size === 2) { const [a, b] = [...PL.pts.values()]; PL.drag = { kind: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y), vb: [...PL.vb], c: planPt({ clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 }) }; return; }
+    const p = planPt(e), hit = e.target.closest("[data-pi]")?.dataset.pi;
+    PL.drag = { kind: "none", sx: e.clientX, sy: e.clientY, p0: p, hit, moved: false, button: e.button };
+    if (PL.tool === "select" && hit && e.button === 0) {
+      if (e.shiftKey || e.ctrlKey || e.metaKey) { PL.sel.has(hit) ? PL.sel.delete(hit) : PL.sel.add(hit); PL.drag.kind = "none"; render(); return; }
+      if (!PL.sel.has(hit)) { PL.sel = new Set([hit]); render(); }
+      const items = planItems(f.id).filter(it => PL.sel.has(keyOf(it)));
+      PL.drag.kind = "move"; PL.drag.orig = items.map(it => ({ it, x: it.x, y: it.y }));
+    } else if (PL.tool === "select" || e.button === 1) PL.drag.kind = "pan";
+  });
+  psvg.addEventListener("pointermove", e => {
+    planReadout(e);
+    if (!PL.pts.has(e.pointerId)) { if (PL.measure?.a && !PL.measure.b) renderPlanSvg(); return; }
+    PL.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const dr = PL.drag; if (!dr) return;
+    if (dr.kind === "pinch") {
+      const [a, b] = [...PL.pts.values()], s = dr.d0 / (Math.hypot(a.x - b.x, a.y - b.y) || 1), vb = dr.vb;
+      const w = Math.max(2000, Math.min(400000, vb[2] * s)), h = vb[3] * (w / vb[2]);
+      PL.vb = [dr.c.x - (dr.c.x - vb[0]) * (w / vb[2]), dr.c.y - (dr.c.y - vb[1]) * (h / vb[3]), w, h]; psvg.setAttribute("viewBox", PL.vb.join(" ")); return;
+    }
+    if (!dr.moved && Math.hypot(e.clientX - dr.sx, e.clientY - dr.sy) < 5) return;
+    dr.moved = true;
+    if (dr.kind === "pan") {
+      const M = psvg.getScreenCTM(); if (!M) return;
+      PL.vb[0] -= (e.clientX - dr.sx) / M.a; PL.vb[1] -= (e.clientY - dr.sy) / M.d; dr.sx = e.clientX; dr.sy = e.clientY;
+      psvg.setAttribute("viewBox", PL.vb.join(" "));
+    } else if (dr.kind === "move") {
+      const p = planPt(e), dx = p.x - dr.p0.x, dy = p.y - dr.p0.y, lead = dr.orig[0], s = snapItem(lead.it, lead.x + dx, lead.y + dy), ddx = s.x - lead.x, ddy = s.y - lead.y;
+      for (const o of dr.orig) { const nx = o.x + ddx, ny = o.y + ddy; if (o.it.col === "racks") { o.it.doc.px = nx; o.it.doc.py = ny; } else { o.it.doc.x = nx; o.it.doc.y = ny; } }
+      dr.dx = ddx; dr.dy = ddy; renderPlanSvg();
+    }
+  });
+  async function planUp(e) {
+    PL.pts.delete(e.pointerId);
+    const dr = PL.drag; if (!dr) return;
+    if (dr.kind === "pinch") { if (!PL.pts.size) PL.drag = null; return; }
+    PL.drag = null;
+    const f = curFloor(); if (!f) return;
+    if (dr.kind === "move" && dr.moved) {
+      if (dr.dx || dr.dy) await planSave(dr.orig.map(o => { const fx = o.it.col === "racks" ? o.it.doc.px : o.it.doc.x, fy = o.it.col === "racks" ? o.it.doc.py : o.it.doc.y; return { col: o.it.col, id: o.it.id, body: { ...strip(o.it.doc), ...(o.it.col === "racks" ? { location: `${f.name} ${tileOf(f, fx - dims(o.it).W / 2 + 1, fy - dims(o.it).D / 2 + 1)}` } : {}), updatedAt: new Date().toISOString() } }; }), "이동");
+      // restore the drawn-only positions if nothing changed
+      else for (const o of dr.orig) { if (o.it.col === "racks") { o.it.doc.px = o.x; o.it.doc.py = o.y; } else { o.it.doc.x = o.x; o.it.doc.y = o.y; } }
+      render(); return;
+    }
+    if (dr.moved) return;
+    const p = planPt(e);
+    if (PL.placeRack) {
+      const rk = state.racks.find(r => r.id === PL.placeRack); PL.placeRack = null;
+      if (rk) { const it = { type: "rack", w: rk.fw || 600, d: rk.fd || 1200, rot: rk.rot || 0 }, s = snapItem(it, p.x, p.y); await planSave([{ col: "racks", id: rk.id, body: { ...strip(rk), floorId: f.id, px: s.x, py: s.y, fw: it.w, fd: it.d, rot: it.rot, location: `${f.name} ${tileOf(f, s.x - dims(it).W / 2 + 1, s.y - dims(it).D / 2 + 1)}` } }], "랙 놓기"); PL.sel = new Set(["racks:" + rk.id]); }
+      render(); return;
+    }
+    if (PL.tool === "measure") { PL.measure = !PL.measure?.a || PL.measure.b ? { a: { x: snapV(p.x), y: snapV(p.y) } } : { a: PL.measure.a, b: { x: snapV(p.x), y: snapV(p.y) } }; renderPlanSvg(); return; }
+    if (PL.tool === "row") { openRowDlg(p); return; }
+    if (PTYPES[PL.tool]) { await planAdd(PL.tool, p.x, p.y); setPlanTool("select"); render(); return; }
+    if (PL.tool === "select" && !dr.hit && PL.sel.size) { PL.sel.clear(); render(); }
+  }
+  psvg.addEventListener("pointerup", planUp);
+  psvg.addEventListener("pointercancel", e => { PL.pts.delete(e.pointerId); PL.drag = null; });
+  psvg.addEventListener("wheel", e => {
+    e.preventDefault(); const p = planPt(e), k = Math.exp(e.deltaY * 0.0015), vb = PL.vb;
+    const w = Math.max(2000, Math.min(400000, vb[2] * k)), h = vb[3] * (w / vb[2]);
+    PL.vb = [p.x - (p.x - vb[0]) * (w / vb[2]), p.y - (p.y - vb[1]) * (h / vb[3]), w, h]; psvg.setAttribute("viewBox", PL.vb.join(" "));
+  }, { passive: false });
+  psvg.addEventListener("dblclick", e => { const hit = e.target.closest("[data-pi]")?.dataset.pi; if (hit?.startsWith("racks:")) { state.view = "rack"; setView("rack"); render(); } });
+  function setPlanTool(t) { PL.tool = t; PL.placeRack = null; if (t !== "measure") PL.measure = null; $("#planHint").textContent = { select: "물체를 눌러 고르고 끌어서 옮깁니다. 빈 곳을 끌면 화면이 움직입니다. Shift+누르기로 여러 개 고르기.", row: "랙 줄을 시작할 자리(왼쪽 위)를 누르세요.", measure: "두 점을 차례로 누르면 거리를 잽니다." }[t] || `${PTYPES[t]?.label || ""}을(를) 놓을 자리를 누르세요.`; }
+  document.addEventListener("keydown", e => {
+    if (state.view !== "plan" || e.target.closest("input,select,textarea,dialog")) return;
+    const f = curFloor(); if (!f) return;
+    const items = planItems(f.id).filter(it => PL.sel.has(keyOf(it)));
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); planUndo(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") { e.preventDefault(); planDup(items); return; }
+    if (e.key === "Escape") { setPlanTool("select"); PL.sel.clear(); PL.measure = null; render(); return; }
+    if (!items.length) return;
+    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); planDelete(items); return; }
+    if (e.key === "r" || e.key === "R") { e.preventDefault(); planRotate(items, e.shiftKey ? -90 : 90); return; }
+    const mv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (mv) { e.preventDefault(); const st = e.shiftKey ? 100 : (PL.snap || 100); planSave(items.map(it => ({ col: it.col, id: it.id, body: itBody(it, { x: it.x + mv[0] * st, y: it.y + mv[1] * st }) })), "이동"); }
+  });
+  // ---- toolbar, floors, panel
+  $("#planTools").addEventListener("click", e => { const b = e.target.closest("[data-ptool]"); if (!b) return; setPlanTool(b.dataset.ptool); renderPlan(); });
+  $("#planFloors").addEventListener("click", async e => {
+    const b = e.target.closest("[data-floor]"); if (!b) return;
+    if (b.dataset.floor === "+") { await addFloor(); return; }
+    PL.floor = b.dataset.floor; PL.sel.clear(); PL.fitNext = true; try { localStorage.setItem("portbook.floor", PL.floor); } catch (err) {} render();
+  });
+  async function addFloor() {
+    const fs = sortedFloors(), base = fs.length ? Math.max(0, ...fs.map(f => parseInt(f.name, 10) || 0)) + 1 : 1, id = store.newId(), last = fs[fs.length - 1];
+    await planSave([{ col: "floors", id, body: { name: `${base}F`, order: Date.now(), w: last?.w || 24000, h: last?.h || 18000, tile: last?.tile || 600 } }], "층 추가");
+    PL.floor = id; PL.fitNext = true; try { localStorage.setItem("portbook.floor", id); } catch (err) {} render();
+  }
+  $("#planAddFloor").addEventListener("click", addFloor);
+  $("#planSnap").addEventListener("change", e => { PL.snap = +e.target.value; try { localStorage.setItem("portbook.snap", PL.snap); } catch (err) {} });
+  $("#planAisle").addEventListener("change", e => { PL.aisle = e.target.checked; try { localStorage.setItem("portbook.aisle", PL.aisle ? "1" : "0"); } catch (err) {} renderPlanSvg(); });
+  $("#planCable").addEventListener("change", e => { PL.cable = e.target.checked; try { localStorage.setItem("portbook.pcable", PL.cable ? "1" : "0"); } catch (err) {} renderPlanSvg(); });
+  $("#planUndo").addEventListener("click", planUndo);
+  $("#planZoom").addEventListener("click", e => {
+    const b = e.target.closest("[data-pz]"); if (!b) return; const f = curFloor(); if (!f) return;
+    if (b.dataset.pz === "fit") { planFit(f); } else { const k = b.dataset.pz === "in" ? 0.8 : 1.25, vb = PL.vb, cx = vb[0] + vb[2] / 2, cy = vb[1] + vb[3] / 2; PL.vb = [cx - vb[2] * k / 2, cy - vb[3] * k / 2, vb[2] * k, vb[3] * k]; }
+    psvg.setAttribute("viewBox", PL.vb.join(" "));
+  });
+  $("#planSide").addEventListener("click", async e => {
+    const pr = e.target.closest("[data-placerack]"); if (pr) { PL.placeRack = PL.placeRack === pr.dataset.placerack ? null : pr.dataset.placerack; $("#planHint").textContent = "랙을 놓을 자리를 누르세요."; renderPlan(); return; }
+    const b = e.target.closest("[data-pl]"); if (!b) return; const f = curFloor(); if (!f) return;
+    const items = planItems(f.id).filter(it => PL.sel.has(keyOf(it))), a = b.dataset.pl;
+    if (a === "rotl" || a === "rotr") await planRotate(items, a === "rotl" ? -90 : 90);
+    else if (a === "dup") await planDup(items);
+    else if (a === "del") await planDelete(items);
+    else if (a === "openrack") { setView("rack"); render(); }
+    else if (a === "alignx" || a === "aligny") { const v = a === "alignx" ? items[0].y : items[0].x; await planSave(items.map(it => ({ col: it.col, id: it.id, body: itBody(it, a === "alignx" ? { y: v } : { x: v }) })), "줄 맞춤"); }
+    else if (a === "delfloor") {
+      const its = planItems(f.id);
+      if (!await confirmBox(`${f.name} 삭제`, `이 층과 벽·설비 ${its.filter(i => i.col === "planobjs").length}개를 지웁니다.${its.some(i => i.type === "rack") ? " 이 층에 있던 랙은 지우지 않고 '평면도에 없는 랙'이 됩니다." : ""}`)) return;
+      await planSave([...its.map(it => it.col === "racks" ? { col: "racks", id: it.id, body: { ...strip(it.doc), floorId: "", px: null, py: null } } : { col: it.col, id: it.id, body: null }), { col: "floors", id: f.id, body: null }], "층 삭제");
+      PL.floor = null; PL.fitNext = true; render();
+    }
+    render();
+  });
+  $("#planSide").addEventListener("change", async e => {
+    const f = curFloor(); if (!f) return; const id = e.target.id, v = e.target.value.trim();
+    if (id.startsWith("pl_f")) {
+      const num = parseFloat(v), patch = id === "pl_fname" ? (v ? { name: v } : null) : id === "pl_fw" ? (num >= 3 && num <= 500 ? { w: Math.round(num * 1000) } : null) : id === "pl_fh" ? (num >= 3 && num <= 500 ? { h: Math.round(num * 1000) } : null) : id === "pl_ftile" ? { tile: +v } : null;
+      if (!patch) { toast("값을 확인하세요. 크기는 3–500 m입니다."); render(); return; }
+      await planSave([{ col: "floors", id: f.id, body: { ...strip(f), ...patch } }], "층 설정"); if (patch.w || patch.h) PL.fitNext = true; render(); return;
+    }
+    const items = planItems(f.id).filter(it => PL.sel.has(keyOf(it))); if (items.length !== 1) return; const it = items[0], b = bbox(it);
+    let patch = null;
+    if (id === "pl_name") {
+      if (it.type === "rack") { if (!v) { toast("랙 이름을 넣으세요."); render(); return; } if (state.racks.some(r => r.id !== it.id && r.name.toLowerCase() === v.toLowerCase())) { toast("같은 이름의 랙이 있습니다."); render(); return; } }
+      patch = { name: v };
+    } else if (id === "pl_x" || id === "pl_y") { const n = parseFloat(v) * 1000; if (!Number.isFinite(n)) { render(); return; } patch = id === "pl_x" ? { x: n + (it.x - b.x1) } : { y: n + (it.y - b.y1) }; }
+    else if (id === "pl_w" || id === "pl_d") { const n = parseInt(v, 10); if (!(n >= 50 && n <= 100000)) { toast("50–100000 mm"); render(); return; } patch = id === "pl_w" ? { w: n } : { d: n }; }
+    else if (id === "pl_size") { const [w, d] = v.split("x").map(Number); patch = { w, d }; }
+    else if (id === "pl_u") { const n = parseInt(v, 10); if (!(n >= 1 && n <= 60)) { toast("높이는 1–60U"); render(); return; } const over = inRack(it.id).filter(d => d.rackU + (d.rackH || 1) - 1 > n); if (over.length) { toast(`${over.map(d => d.name).join(", ")}이(가) 밖으로 나갑니다.`); render(); return; } patch = { height: n }; }
+    else if (id === "pl_kw") { const n = parseFloat(v); patch = { kw: v === "" ? null : Number.isFinite(n) && n >= 0 && n <= 200 ? Math.round(n * 10) / 10 : undefined }; if (patch.kw === undefined) { toast("전력은 0–200 kW"); render(); return; } }
+    if (patch) await planSave([{ col: it.col, id: it.id, body: itBody(it, patch) }], "속성");
+    render();
+  });
+  $("#planSide").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches("input")) { e.preventDefault(); e.target.blur(); } });
+  // ---- row dialog
+  let rowAt = null;
+  function openRowDlg(p) {
+    rowAt = p; const used = new Set(state.racks.map(r => (r.name.match(/^[A-Za-z]+/) || [""])[0].toUpperCase()));
+    let pre = "A"; for (let i = 0; i < 26; i++) { const c = String.fromCharCode(65 + i); if (!used.has(c)) { pre = c; break; } }
+    $("#row_pre").value = pre; $("#rowDlg").showModal();
+  }
+  $("#rowForm").addEventListener("submit", async e => {
+    e.preventDefault(); if (e.submitter?.value === "cancel") { $("#rowDlg").close(); setPlanTool("select"); render(); return; }
+    const n = parseInt($("#row_n").value, 10), st = parseInt($("#row_start").value, 10), u = parseInt($("#row_u").value, 10), [w, d] = $("#row_size").value.split("x").map(Number), rot = +$("#row_dir").value, prefix = $("#row_pre").value.trim() || "A";
+    if (!(n >= 1 && n <= 60) || !(st >= 0) || !(u >= 1 && u <= 60)) { toast("개수 1–60, 높이 1–60U로 넣으세요."); return; }
+    $("#rowDlg").close(); await planAddRow(rowAt.x, rowAt.y, { n, start: st, u, w, d, rot, prefix }); setPlanTool("select"); render();
+  });
+  // ---- export: DXF (opens in AutoCAD and other CAD tools) and SVG
+  function dxfText(s) { return [...String(s)].map(ch => ch.charCodeAt(0) < 128 ? ch : "\\U+" + ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")).join(""); }
+  function planDxf(f) {
+    const items = planItems(f.id), out = ["0", "SECTION", "2", "HEADER", "9", "$INSUNITS", "70", "4", "0", "ENDSEC", "0", "SECTION", "2", "ENTITIES"];
+    const Y = y => -y, line = (layer, x1, y1, x2, y2) => out.push("0", "LINE", "8", layer, "10", x1.toFixed(1), "20", Y(y1).toFixed(1), "30", "0", "11", x2.toFixed(1), "21", Y(y2).toFixed(1), "31", "0");
+    const text = (layer, x, y, h, s, center = true) => out.push("0", "TEXT", "8", layer, "10", x.toFixed(1), "20", Y(y).toFixed(1), "30", "0", "40", String(h), "1", dxfText(s), ...(center ? ["72", "1", "11", x.toFixed(1), "21", Y(y).toFixed(1), "31", "0"] : []));
+    const rect = (layer, b) => { line(layer, b.x1, b.y1, b.x2, b.y1); line(layer, b.x2, b.y1, b.x2, b.y2); line(layer, b.x2, b.y2, b.x1, b.y2); line(layer, b.x1, b.y2, b.x1, b.y1); };
+    rect("FLOOR", { x1: 0, y1: 0, x2: f.w, y2: f.h });
+    const t = f.tile || 600; for (let x = t; x < f.w; x += t) line("GRID", x, 0, x, f.h); for (let y = t; y < f.h; y += t) line("GRID", 0, y, f.w, y);
+    for (const it of items) {
+      const b = bbox(it), L = it.type.toUpperCase(); rect(L, b);
+      if (it.type === "rack") { const s = aisleStrip(it, 0, false), [fx, fy] = frontVec(it.rot); if (fy) line("RACK-FRONT", b.x1, fy > 0 ? b.y2 : b.y1, b.x2, fy > 0 ? b.y2 : b.y1); else line("RACK-FRONT", fx > 0 ? b.x2 : b.x1, b.y1, fx > 0 ? b.x2 : b.x1, b.y2); void s; }
+      const label = it.type === "rack" ? it.name : it.name || PTYPES[it.type].label;
+      if (label) text("TEXT", it.x, it.y, it.type === "room" ? 300 : 160, label);
+    }
+    text("TEXT", 0, -600, 400, `${f.name} (${f.w / 1000} x ${f.h / 1000} m)`, false);
+    out.push("0", "ENDSEC", "0", "EOF");
+    return out.join("\r\n");
+  }
+  const PLAN_EXPORT_CSS = `.pl-floor{fill:#f7f8fa}.pl-floor-edge{fill:none;stroke:#333;stroke-width:60}.pl-tile{stroke:#d9dde3;stroke-width:8}.pl-tile5{stroke:#b9c0ca;stroke-width:14}.pl-axis{font:180px sans-serif;fill:#667;text-anchor:middle}.pl-cold{fill:rgba(40,120,230,.12)}.pl-hot{fill:rgba(230,70,50,.12)}.pl-body{fill:#fff;stroke:#333;stroke-width:24}.pl-rack .pl-body{fill:#e8eef8;stroke:#1d5bb8}.pl-use{fill:rgba(29,91,184,.25)}.pl-front{stroke:#1d5bb8;stroke-width:70}.pl-arrow{fill:none;stroke:#1d5bb8;stroke-width:30}.pl-wall .pl-body{fill:#555}.pl-column .pl-body{fill:#888}.pl-hatch{stroke:#fff;stroke-width:20}.pl-room .pl-body{fill:none;stroke:#888;stroke-dasharray:200 120}.pl-tray .pl-body{fill:rgba(160,120,40,.15);stroke:#a07828;stroke-dasharray:160 80}.pl-crac .pl-body{fill:#dff3f7;stroke:#15808f}.pl-ups .pl-body,.pl-pdu .pl-body{fill:#fbefd9;stroke:#a8660b}.pl-label .pl-body{fill:none;stroke:none}.pl-door .pl-body{fill:#fff}.pl-swing{fill:none;stroke:#888;stroke-width:16;stroke-dasharray:60 40}.pl-name{font:200px sans-serif;text-anchor:middle;fill:#111}.pl-sub{font:140px sans-serif;text-anchor:middle;fill:#555}.pl-roomname{font:320px sans-serif;fill:#666}.pl-label{font:260px sans-serif;text-anchor:middle;fill:#111}.pl-cable{fill:none;stroke:#7a4fd8;stroke-width:30;stroke-dasharray:120 80}.pl-cablelbl{font:150px sans-serif;fill:#7a4fd8}`;
+  async function planExport(kind) {
+    const f = curFloor(); if (!f) return;
+    const name = `portbook-${f.name.replace(/[^\w가-힣-]+/g, "_")}`;
+    if (kind === "dxf") { await saveFile(planDxf(f), name + ".dxf"); return; }
+    const items = planItems(f.id), m = 1500, body = planMarkup(f, items, { aisle: PL.aisle, cable: PL.cable, cables: planCables(f, items) });
+    await saveFile(`<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-m} ${-m} ${f.w + 2 * m} ${f.h + 2 * m}" width="${(f.w + 2 * m) / 10}mm" height="${(f.h + 2 * m) / 10}mm"><style>${PLAN_EXPORT_CSS}</style>${body}</svg>`, name + ".svg");
+  }
+  $("#planExport").addEventListener("click", e => { const b = e.target.closest("[data-pexp]"); if (b) planExport(b.dataset.pexp); });
 
   // ---------- topology ----------
   const svg = $("#topoSvg");
@@ -2255,7 +2824,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     }
     const id = editingRack?.id || store.newId();
     try {
-      await store.save("racks", id, { name, height, location: $("#r_loc").value.trim(), order: editingRack?.order ?? Date.now() });
+      await store.save("racks", id, { ...(editingRack ? strip(editingRack) : {}), name, height, location: $("#r_loc").value.trim(), order: editingRack?.order ?? Date.now() });
       $("#rackDlg").close(); toast(editingRack ? `${name}을(를) 저장했습니다.` : `${name} 랙(${height}U)을 추가했습니다. 빈 칸을 눌러 장비를 넣으세요.`);
     } catch (e) { writeErr(e); }
   });
@@ -3396,10 +3965,10 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       catch (e) { if (e?.code && /declin|cancel|dismiss|not_granted/i.test(e.code)) { toast("저장을 취소했습니다."); return false; } }
     }
     // outside Claude (GitHub Pages, a downloaded copy): the browser's own save
-    const type = /\.csv$/i.test(filename) ? "text/csv" : "application/json";
+    const ext = filename.split(".").pop().toLowerCase(), type = { csv: "text/csv", svg: "image/svg+xml", dxf: "application/dxf" }[ext] || "application/json";
     if (window.showSaveFilePicker && !/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {   // Chrome/Edge on a computer: pick the folder
       try {
-        const h = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: type === "text/csv" ? "CSV" : "포트북 파일", accept: { [type]: ["." + filename.split(".").pop()] } }] });
+        const h = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: { csv: "CSV", svg: "SVG 도면", dxf: "DXF 도면" }[ext] || "포트북 파일", accept: { [type]: ["." + ext] } }] });
         const w = await h.createWritable(); await w.write(new Blob([text], { type })); await w.close();
         toast(`${h.name || filename} 파일로 저장했습니다.`); return true;
       } catch (e) { if (e?.name === "AbortError") { toast("저장을 취소했습니다."); return false; } }
@@ -3416,7 +3985,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   async function saveProject() {
     if (!state.devices.length) { toast("저장할 장비가 없습니다."); return false; }
     const n = new Date(), stamp = `${n.getFullYear()}${pad2(n.getMonth() + 1)}${pad2(n.getDate())}-${pad2(n.getHours())}${pad2(n.getMinutes())}`;
-    const data = { app: FILE_APP, version: 1, savedAt: n.toISOString(), devices: state.devices.map(d => ({ ...d })), interfaces: state.ifaces.map(i => ({ ...i })), racks: state.racks.map(r => ({ ...r })) };
+    const data = { app: FILE_APP, version: 1, savedAt: n.toISOString(), devices: state.devices.map(d => ({ ...d })), interfaces: state.ifaces.map(i => ({ ...i })), racks: state.racks.map(r => ({ ...r })), floors: state.floors.map(f => ({ ...f })), planobjs: state.planobjs.map(o => ({ ...o })) };
     return saveFile(JSON.stringify(data, null, 2), `portbook-${stamp}.json`);
   }
   async function runOps(ops, label) {
@@ -3425,9 +3994,10 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       if (ops.length > 24) toast(`${label} ${Math.min(i + 8, ops.length)} / ${ops.length}`);
     }
   }
-  async function wipeAll() {
-    const ifs = [...state.ifaces], devs = [...state.devices], rks = [...state.racks];
-    await runOps([...ifs.map(i => () => store.remove("interfaces", i.id)), ...devs.map(d => () => store.remove("devices", d.id)), ...rks.map(r => () => store.remove("racks", r.id))], "지우는 중");
+  async function wipeAll(keepPlan = false) {
+    const ifs = [...state.ifaces], devs = [...state.devices], rks = keepPlan ? [] : [...state.racks], fls = keepPlan ? [] : [...state.floors], pos = keepPlan ? [] : [...state.planobjs];
+    await runOps([...ifs.map(i => () => store.remove("interfaces", i.id)), ...devs.map(d => () => store.remove("devices", d.id)), ...rks.map(r => () => store.remove("racks", r.id)),
+      ...fls.map(f => () => store.remove("floors", f.id)), ...pos.map(o => () => store.remove("planobjs", o.id))], "지우는 중");
   }
   function afterBulk() { state.selected = null; state.cfgOpen = false; manualVB = null; lastVB = null; if (state.tool) setTool(null); remember(); render(); }
   function openReset() {
@@ -4801,8 +5371,11 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     if (!await confirmBox(pt ? "Packet Tracer 파일 불러오기" : "파일 불러오기", `${file.name}${pt ? (pt.version ? ` (Packet Tracer ${pt.version})` : "") : ` (${when} 저장)`}: 장비 ${devs.length}대, 포트 ${ifs.length}개${rks.length ? `, 랙 ${rks.length}개` : ""}.${ptNote}${cur}`, "불러오기")) return;
     const clean = o => { const { id, ...rest } = o; return JSON.parse(JSON.stringify(rest)); };
     try {
-      await wipeAll();
-      await runOps([...rks.map(r => () => store.save("racks", r.id, { ...clean(r), height: Math.max(1, Math.min(60, +r.height)) })), ...devs.map(d => () => store.save("devices", d.id, clean(d))), ...ifs.map(i => () => store.save("interfaces", i.id, clean(i)))], "불러오는 중");
+      const fls = (Array.isArray(data.floors) ? data.floors : []).filter(f => f && typeof f.id === "string" && SAFE_ID.test(f.id)).slice(0, 50);
+      const pos = (Array.isArray(data.planobjs) ? data.planobjs : []).filter(o => o && typeof o.id === "string" && SAFE_ID.test(o.id)).slice(0, 5000);
+      await wipeAll(!!pt);   // a Packet Tracer file has no floor plan: keep racks and floors as they are
+      await runOps([...rks.map(r => () => store.save("racks", r.id, { ...clean(r), height: Math.max(1, Math.min(60, +r.height)) })),
+        ...fls.map(f => () => store.save("floors", f.id, clean(f))), ...pos.map(o => () => store.save("planobjs", o.id, clean(o))), ...devs.map(d => () => store.save("devices", d.id, clean(d))), ...ifs.map(i => () => store.save("interfaces", i.id, clean(i)))], "불러오는 중");
       afterBulk();
       toast(`불러왔습니다: 장비 ${devs.length}대, 포트 ${ifs.length}개${pt ? `, 케이블 ${pt.cables}개` : ""}`);
       if (pt) setTimeout(() => $("#zoomBar [data-zoom=\"fit\"]")?.click(), 300);
