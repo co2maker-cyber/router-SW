@@ -292,6 +292,20 @@ dialog form { display: flex; flex-direction: column; }
 .hw-row { display: flex; align-items: center; gap: 8px; }
 .hw-row label { font-size: 12px; font-weight: 600; color: var(--muted); flex: none; }
 .hw select { flex: 1; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); min-width: 0; width: 100%; }
+.hwwarn { margin: 10px 14px; border: 1px solid var(--warn); background: var(--warn-soft); border-radius: var(--r); padding: 10px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+.hwwarn b { color: var(--fg); }
+.hwwarn table { border-collapse: collapse; width: 100%; }
+.hwwarn td { padding: 5px 4px; border-top: 1px solid var(--line); vertical-align: top; font-size: 12.5px; }
+.hwwarn td:first-child { white-space: nowrap; width: 1%; padding-right: 12px; }
+.hwwarn small { color: var(--muted); }
+.hwwarn.done { flex-direction: row; align-items: center; justify-content: space-between; border-color: var(--up); background: var(--panel); }
+.hw-ok { color: var(--up); font-weight: 700; } .hw-del { color: var(--down); font-weight: 700; }
+.hw-btns { display: flex; gap: 8px; align-items: center; }
+.hw-note { margin: 0; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 8px; }
+.hwhint { border-radius: 6px; padding: 7px 9px; font-size: 12.5px; line-height: 1.45; margin-top: 4px; }
+.hwhint small { display: block; font-size: 12px; opacity: .9; }
+.hwhint.good { background: color-mix(in srgb, var(--up) 12%, var(--panel)); border: 1px solid var(--up); }
+.hwhint.bad { background: color-mix(in srgb, var(--down) 10%, var(--panel)); border: 1px solid var(--down); }
 .chassis { border: 1px solid var(--line); border-radius: var(--r); background: var(--sunk); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
 .chassis-top { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); }
 .chassis-top b { color: var(--fg); font-family: var(--font-mono); }
@@ -933,7 +947,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     <div class="dlg-body">
       <div class="field"><label for="i_type">포트 *</label>
         <div class="portpick"><select id="i_type" aria-label="인터페이스 종류"></select><input id="i_num" class="mono" required placeholder="0/0" autocomplete="off" aria-label="포트 번호"></div>
-        <span class="hint" id="nameHint">GigabitEthernet0/0</span><span class="err" hidden></span>
+        <span class="hint" id="nameHint">GigabitEthernet0/0</span><span class="err" hidden></span><div class="hwhint" id="hwHint" hidden></div>
         <div class="seg" id="typeSeg" hidden></div><span id="typePrefix" hidden></span></div>
       <div class="field"><label for="i_state">포트 상태</label>
         <select id="i_state"><option value="on">켜짐 (no shutdown)</option><option value="off">꺼짐 (shutdown)</option><option value="unplugged">켜짐 · 케이블 미연결 (down)</option></select>
@@ -2575,15 +2589,127 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     }
     return out;
   }
+
+  // ---- real hardware only: a catalogued router/switch/firewall keeps just the ports its chassis and modules have;
+  // a module port that is missing gets its module put into the empty slot, anything else is not real
+  const LOGICAL_IF = ["Loopback", "Vlan", "Tunnel", "Port-channel"];
+  const isLogicalIf = (type, num) => LOGICAL_IF.includes(type) || String(num).includes(".");
+  const hwEnforced = d => { const sp = d && ROUTERS[d.model]; return !!sp && d.kind !== "other" && kindsOf(sp).includes(d.kind) && (sp.onboard.length + sp.slots.length > 0); };
+  const ifParts = i => i.ifType ? { type: i.ifType, num: i.ifNum } : splitName(i.name);
+  // which modules to add so the named ports exist: { mods, added: {slot: module}, ok: Map(name → slot), bad: [{ name, why }] }
+  function planPorts(model, modules, names) {
+    const spec = ROUTERS[model], mods = { ...(modules || {}) }, added = {}, ok = new Map(), bad = [];
+    const real = () => new Map(hwPorts(model, mods).map(p => [p.name.toLowerCase(), p.src]));
+    let have = real();
+    const want = new Map();   // empty slot → { type, lo, hi, names }
+    for (const nm of names) {
+      const { type, num } = splitName(nm), key = (type + num).toLowerCase();
+      if (isLogicalIf(type, num)) { ok.set(nm, "manual"); continue; }
+      if (have.has(key)) { ok.set(nm, have.get(key)); continue; }
+      const seg = String(num).split("/"), idx = +seg.pop(), slot = seg.join("/"), sl = spec.slots.find(([s]) => s === slot);
+      const onb = portRanges(spec.onboard).join(", ") || "없음";
+      if (!sl || !seg.length || !Number.isFinite(idx)) { bad.push({ name: nm, why: `${model}에 ${abbr(nm)} 같은 포트는 없음 (내장 ${onb}${spec.slots.length ? `, 모듈 포트는 ${spec.slots[0][0]}/번호 처럼 슬롯 번호 뒤에` : ""})` }); continue; }
+      if (mods[slot]) { const m = MODULES[mods[slot]]; bad.push({ name: nm, why: `슬롯 ${slot}에 이미 ${mods[slot]}(${m?.desc || ""})이 꽂혀 있음` }); continue; }
+      const w = want.get(slot);
+      if (w && w.type !== type) { bad.push({ name: nm, why: `슬롯 ${slot} 하나에 ${abbr(w.type + "0")}와 ${abbr(type + "0")} 포트를 같이 둘 수 없음` }); continue; }
+      if (w) { w.lo = Math.min(w.lo, idx); w.hi = Math.max(w.hi, idx); w.names.push(nm); } else want.set(slot, { type, lo: idx, hi: idx, names: [nm], st: sl[1] });
+    }
+    for (const [slot, w] of want) {
+      const fit = Object.entries(MODULES).filter(([, m]) => m.fits.includes(w.st) && m.type === w.type && (m.start || 0) <= w.lo && (m.start || 0) + m.n > w.hi)
+        .sort((a, b) => ((a[1].sw ? 100 : 0) + a[1].n + (/^WIC-/.test(a[0]) ? 10 : 0)) - ((b[1].sw ? 100 : 0) + b[1].n + (/^WIC-/.test(b[0]) ? 10 : 0)) || natCmp(a[0], b[0]));
+      if (!fit.length) { w.names.forEach(nm => bad.push({ name: nm, why: `슬롯 ${slot}(${SLOT_LABEL[w.st]})에 맞는 ${abbr(w.type + "0").replace(/0$/, "")} 모듈이 없음` })); continue; }
+      mods[slot] = added[slot] = fit[0][0]; w.names.forEach(nm => ok.set(nm, slot));
+    }
+    return { mods, added, ok, bad };
+  }
+  // ports on this device the real chassis does not have, and what tidying would do with them
+  function hwAudit(d) {
+    if (!hwEnforced(d)) return null;
+    const phys = ifacesOf(d.id).filter(i => { const s = ifParts(i); return !isLogicalIf(s.type, s.num); });
+    const real = new Set(hwPorts(d.model, d.modules).map(p => p.name.toLowerCase()));
+    const odd = phys.filter(i => !real.has((ifParts(i).type + ifParts(i).num).toLowerCase()));
+    if (!odd.length) return null;
+    const plan = planPorts(d.model, d.modules, odd.map(i => ifParts(i).type + ifParts(i).num));
+    const fix = odd.filter(i => plan.ok.has(ifParts(i).type + ifParts(i).num)), drop = odd.filter(i => !fix.includes(i));
+    const why = new Map(plan.bad.map(b => [b.name, b.why]));
+    return { odd, fix, drop, plan, why: i => why.get(ifParts(i).type + ifParts(i).num) || "" };
+  }
+  let hwUndo = null;   // the last tidy-up, to put back
+  async function hwTidy(d, quiet) {
+    const a = hwAudit(d); if (!a) return 0;
+    const now = new Date().toISOString(), before = { dev: JSON.parse(JSON.stringify(strip(d))), ifs: [], made: [] };
+    const keep = i => before.ifs.some(x => x.id === i.id) || before.ifs.push({ id: i.id, doc: JSON.parse(JSON.stringify(strip(i))) });
+    try {
+      await store.save("devices", d.id, { ...strip(d), modules: a.plan.mods, updatedAt: now });
+      for (const i of a.fix) { keep(i); await store.save("interfaces", i.id, { ...strip(i), src: a.plan.ok.get(ifParts(i).type + ifParts(i).num), updatedAt: now }); }
+      for (const i of a.drop) {
+        keep(i);
+        const t = i.peerIfId && state.ifaces.find(x => x.id === i.peerIfId && x.peerIfId === i.id);
+        if (t) { keep(t); await store.save("interfaces", t.id, { ...strip(t), peerDeviceId: "", peerIfId: "", peer: "", cable: null, status: t.status === "up" ? "down" : t.status }); }
+        await store.remove("interfaces", i.id);
+      }
+      // the rest of each new module's ports
+      const have = new Set(ifacesOf(d.id).map(i => i.name.toLowerCase()));
+      for (const p of hwPorts(d.model, a.plan.mods)) if (!have.has(p.name.toLowerCase())) { const id = store.newId(); before.made.push(id); await store.save("interfaces", id, { ...p, deviceId: d.id, updatedAt: now }); }
+      hwUndo = { devId: d.id, ...before }; render();
+      const mods = Object.entries(a.plan.added).map(([sl, m]) => `슬롯 ${sl}에 ${m}`).join(", ");
+      if (!quiet) toast(`${d.name}: ${[mods ? mods + " 장착" : "", a.drop.length ? `없는 포트 ${a.drop.length}개 삭제` : ""].filter(Boolean).join(" · ")}`);
+    } catch (e) { writeErr(e); }
+    return a.odd.length;
+  }
+  async function hwUndoTidy() {
+    const u = hwUndo; if (!u) return; hwUndo = null;
+    try {
+      await store.save("devices", u.devId, u.dev);
+      for (const id of u.made) await store.remove("interfaces", id);
+      for (const x of u.ifs) await store.save("interfaces", x.id, x.doc);
+render();       toast("정리 전으로 되돌렸습니다.");
+    } catch (e) { writeErr(e); }
+  }
+  function hwWarnHtml(d) {
+    if (hwUndo?.devId === d.id && !hwAudit(d)) return `<div class="hwwarn done"><span>✓ 실물 기준으로 정리했습니다.</span><button type="button" class="btn sm" data-act="hw-undo">되돌리기</button></div>`;
+    const a = hwAudit(d); if (!a) return "";
+    const fixBy = {}; for (const i of a.fix) { const sl = a.plan.ok.get(ifParts(i).type + ifParts(i).num); (fixBy[sl] ||= []).push(i); }
+    const nm = i => `<span class="mono">${esc(abbr(i.name))}</span>${i.ip ? ` <small class="mono">${esc(i.ip)}</small>` : ""}${i.peerIfId ? " <small>↔ 케이블</small>" : ""}`;
+    return `<div class="hwwarn"><b>⚠ 실물 ${esc(d.model)}에 없는 포트 ${a.odd.length}개 — 정리하면 이렇게 바뀝니다</b><table>`
+      + Object.entries(fixBy).map(([sl, is]) => `<tr><td>${is.map(nm).join("<br>")}</td><td><span class="hw-ok">모듈 자동 장착</span> 슬롯 ${esc(sl)}에 <b>${esc(a.plan.added[sl] || a.plan.mods[sl])}</b><br><small>IP·케이블·설명 그대로 유지</small></td></tr>`).join("")
+      + a.drop.map(i => `<tr><td>${nm(i)}</td><td><span class="hw-del">삭제</span> ${esc(a.why(i))}${i.ip || i.peerIfId ? `<br><small>${[i.ip ? "IP " + esc(i.ip) : "", i.peerIfId ? "케이블" : ""].filter(Boolean).join("·")}이 함께 지워짐</small>` : ""}</td></tr>`).join("")
+      + `</table><div class="hw-btns"><button type="button" class="btn sm primary" data-act="hw-tidy">정리하기</button><small>정리 후 되돌리기 가능</small></div></div>`;
+  }
+  // live check in the port dialog
+  function hwHint() {
+    const el = $("#hwHint"), d = state.devices.find(x => x.id === $("#ifDlg").dataset.dev), num = $("#i_num").value.trim();
+    if (!el) return null;
+    const name = curType + num, same = editingIf && editingIf.name.toLowerCase() === name.toLowerCase();
+    if (!hwEnforced(d) || !num || same || isLogicalIf(curType, num) || !/^\d+([/.:]\d+)*$/.test(num)) { el.hidden = true; return null; }
+    const pl = planPorts(d.model, d.modules, [name]);
+    if (pl.bad.length) {
+      const sl = ROUTERS[d.model].slots;
+      el.className = "hwhint bad"; el.hidden = false;
+      el.innerHTML = `✗ ${esc(d.model)}에는 이 포트가 없습니다. <small>${esc(pl.bad[0].why)}<br>만들 수 있는 포트: 내장 ${esc(portRanges(ROUTERS[d.model].onboard).join(", ") || "없음")}${sl.length ? ` · 슬롯 ${esc(sl.map(x => x[0]).join(", "))} 모듈 포트` : ""} · Loopback·Vlan·하위 인터페이스(0/0.10)</small>`;
+      return pl;
+    }
+    const [slot, mod] = Object.entries(pl.added)[0] || [];
+    if (!slot) { el.hidden = true; return pl; }
+    const m = MODULES[mod], list = Array.from({ length: m.n }, (_, k) => abbr(m.type + slot + "/" + (k + (m.start || 0))));
+    el.className = "hwhint good"; el.hidden = false;
+    el.innerHTML = `✓ 슬롯 ${esc(slot)}이(가) 비어 있어 저장하면 <b>${esc(mod)}</b>를 자동으로 꽂습니다. <small>→ ${esc(list.join(", "))} ${m.n}개 포트가 생깁니다.</small>`;
+    return pl;
+  }
   async function applyHardware(dev, model, modules) {
     const spec = ROUTERS[model];
     if (!spec || !kindsOf(spec).includes(dev.kind)) { try { await store.save("devices", dev.id, { ...strip(dev), model: "", modules: {}, updatedAt: new Date().toISOString() }); } catch (e) { writeErr(e); } return; }
     const clean = {};
     for (const [slot, st] of spec.slots) { const m = modules?.[slot]; if (m && MODULES[m]?.fits.includes(st)) clean[slot] = m; }
-    const want = hwPorts(model, clean), cur = ifacesOf(dev.id);
-    const key = i => { const s = i.ifType ? { type: i.ifType, num: i.ifNum } : splitName(i.name); return (s.type + s.num).toLowerCase(); };
+    const cur = ifacesOf(dev.id), key = i => { const s = ifParts(i); return (s.type + s.num).toLowerCase(); };
+    const enforce = hwEnforced({ ...dev, model });
+    if (enforce && model !== dev.model) {   // a new model: module ports in use get their module on the new chassis too
+      const phys = cur.filter(i => { const s = ifParts(i); return !isLogicalIf(s.type, s.num); }), inUse = phys.filter(i => i.ip || i.peerIfId || i.desc || (i.src && i.src !== "onboard" && i.src !== "manual"));
+      const pl = planPorts(model, clean, inUse.map(i => ifParts(i).type + ifParts(i).num)); Object.assign(clean, pl.mods);
+    }
+    const want = hwPorts(model, clean);
     const curBy = new Map(cur.map(i => [key(i), i])), wantKeys = new Set(want.map(w => (w.ifType + w.ifNum).toLowerCase()));
-    const remove = cur.filter(i => i.src && i.src !== "manual" && !wantKeys.has(key(i)));
+    const remove = cur.filter(i => !wantKeys.has(key(i)) && (enforce ? !isLogicalIf(ifParts(i).type, ifParts(i).num) : i.src && i.src !== "manual"));
     const busy = remove.filter(i => i.ip || i.peerIfId || i.peer);
     if (busy.length && !await confirmBox("포트가 빠집니다", `${busy.map(i => abbr(i.name)).join(", ")}에 있던 IP와 케이블 설정이 함께 지워집니다.`)) { renderCfg(); return; }
     const now = new Date().toISOString();
@@ -2640,6 +2766,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   const BULK_DEF = { router: ["GigabitEthernet", "0/", 0, 2], switch: ["FastEthernet", "0/", 1, 24], l3switch: ["GigabitEthernet", "1/0/", 1, 24], firewall: ["GigabitEthernet", "1/", 1, 8], other: ["FastEthernet", "", 0, 1] };
   let bulkState = null;
   function bulkHtml(d) {
+    if (hwEnforced(d)) return `<p class="hw-note">포트는 모델과 슬롯 모듈로 정해집니다. 모듈 포트를 "+ 인터페이스"로 넣으면 맞는 모듈이 빈 슬롯에 자동으로 꽂힙니다.</p>`;
     const v = bulkState?.dev === d.id ? bulkState : { dev: d.id, type: BULK_DEF[d.kind]?.[0] || "GigabitEthernet", pre: BULK_DEF[d.kind]?.[1] ?? "0/", from: BULK_DEF[d.kind]?.[2] ?? 1, n: BULK_DEF[d.kind]?.[3] ?? 4 };
     bulkState = v;
     return `<div class="bulk"><div class="bulk-h">포트 개수로 추가</div>
@@ -2663,7 +2790,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     $("#bk_prev").textContent = bulkPreview(d);
   });
   async function bulkAdd() {
-    const d = state.devices.find(x => x.id === state.selected); if (!d || !bulkState) return;
+    const d = state.devices.find(x => x.id === state.selected); if (!d || !bulkState || hwEnforced(d)) return;
     if (!/^(\d+\/)*$/.test(bulkState.pre)) { toast("번호 앞부분은 0/ 나 1/0/ 처럼 숫자와 / 로 넣으세요."); return; }
     const have = new Set(ifacesOf(d.id).map(i => i.name.toLowerCase()));
     const names = bulkNames(bulkState).filter(n => !have.has(n.toLowerCase()));
@@ -3646,7 +3773,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
         <div class="facts"><span class="kind">${esc(KIND[d.kind] || "기타")}</span>${d.mgmtIp ? `<span class="mono">${esc(d.mgmtIp)}</span>` : ""}${d.model ? `<span>${esc(d.model)}</span>` : ""}<span class="mono" style="color:var(--accent)">${esc(rackLabel(d) || "랙 미지정")}</span><label class="donechk"><input type="checkbox" data-donechk="${esc(d.id)}"${d.done ? " checked" : ""}> 설정 완료</label></div></div>
         <button class="btn ghost sm" type="button" data-act="cfg-close" aria-label="설정 닫기">✕</button></div>
       <div class="cfg-actions"><button class="btn sm" type="button" data-act="edit-dev">이름 · 정보 수정</button><button class="btn sm" type="button" data-act="ptcfg">설정 창</button><button class="btn sm" type="button" data-act="rear">포트 패널 그림</button>${cliCapable(d) ? '<button class="btn sm" type="button" data-act="cli">CLI</button>' : ""}<button class="btn sm" type="button" data-act="show-list">표로 보기</button><button class="btn sm primary" type="button" data-act="add-if">+ 포트</button></div>
-      ${hwHtml(d)}
+      ${hwWarnHtml(d)}${hwHtml(d)}
       <div class="label" style="padding:10px 14px 2px">인터페이스 ${rows.length} · 눌러서 IP 설정</div>
       <ul class="cfg-ifs">${rows.map(r => `<li><button type="button" data-if="${esc(r.id)}">
         <span class="state ${stCls(r.status) === "admin" ? "" : stCls(r.status)}" title="${esc(STATUS[r.status] || "")}"></span>
@@ -3956,6 +4083,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
           <button class="btn primary" type="button" data-act="add-if">+ 인터페이스</button>
         </div>
       </div>
+      ${hwWarnHtml(d)}
       ${rows.length ? `<div class="faceplate" aria-label="포트 상태">
           ${rows.map(r => `<button type="button" class="port ${r.status === "up" ? "up" : r.status === "down" ? "down" : ""}" data-if="${esc(r.id)}" title="${esc(r.name)} · ${esc(STATUS[r.status] || "")}${r.ip ? " · " + esc(r.ip) : ""}"><span>${esc(shortIf(r.name))}</span></button>`).join("")}
           <span class="legend"><span><i style="background:var(--up)"></i>up</span><span><i style="background:var(--down)"></i>down</span><span><i style="background:var(--admin)"></i>admin down</span></span>
@@ -4121,7 +4249,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     document.querySelectorAll(".serial-only").forEach(el => el.hidden = k !== "Serial");
     updateNameHint(); if (focus) $("#i_num").focus();
   }
-  function updateNameHint() { const n = $("#i_num").value.trim(); $("#nameHint").textContent = curType + (n || (IFT.find(x => x.k === curType)?.ex ?? "")); }
+  function updateNameHint() { const n = $("#i_num").value.trim(); $("#nameHint").textContent = curType + (n || (IFT.find(x => x.k === curType)?.ex ?? "")); hwHint(); }
   seg.addEventListener("click", e => {
     const b = e.target.closest("button[data-type]"); if (!b) return;
     setType(b.dataset.type, true);
@@ -4262,6 +4390,8 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     else if (!/^\d+([/.:]\d+)*$/.test(num)) ok = fieldErr("i_num", "숫자와 / 만 쓸 수 있습니다. 예: 0/0/0, 1/0/24, 0.10") && false;
     else if (ifacesOf(deviceId).some(x => x.name.toLowerCase() === name.toLowerCase() && x.id !== editingIf?.id)) ok = fieldErr("i_num", `이 장비에 ${name}이(가) 이미 있습니다.`) && false;
     else fieldErr("i_num", "");
+    const hwPlan = ok ? hwHint() : null;
+    if (hwPlan?.bad.length) ok = fieldErr("i_num", `${devName(deviceId)}의 실물에 없는 포트입니다.`) && false;
     ok = fieldErr("i_ip", ip && !ipRe.test(ip) ? "IPv4 주소 형식이 아닙니다. 예: 192.168.10.1" : (ip ? specialIp(ip) : "")) && ok;
     ok = fieldErr("i_prefix", Number.isNaN(prefix) ? "올바른 서브넷 마스크가 아닙니다. 예: 255.255.255.0 (또는 24)"
       : (ip && prefix == null ? "서브넷 마스크를 입력하세요."
@@ -4279,7 +4409,8 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     const id = editingIf?.id || store.newId();
     const status = !$("#i_on").checked ? "admin-down" : $("#i_linkdown").checked ? "down" : "up";
     const serial = curType === "Serial";
-    const body = { deviceId, name, ifType: curType, ifNum: num, src: editingIf?.src || "manual", status, ip, prefix: prefix ?? null, mode: $("#i_mode").value, vlan, speed: $("#i_speed").value,
+    const hwSlot = hwPlan?.ok.get(name);
+    const body = { deviceId, name, ifType: curType, ifNum: num, src: hwSlot || editingIf?.src || "manual", status, ip, prefix: prefix ?? null, mode: $("#i_mode").value, vlan, speed: $("#i_speed").value,
       clockRate: serial ? $("#i_clock").value : "", bandwidth: serial ? $("#i_bw").value.trim() : "", encap: serial ? $("#i_encap").value : "",
       xcvr: $(".sfp-only").hidden ? "" : $("#i_xcvr").value,
       ports, desc: $("#i_desc").value.trim(), updatedAt: new Date().toISOString() };
@@ -4290,6 +4421,13 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     body.cable = body.peerIfId && editingIf?.peerIfId === body.peerIfId ? (editingIf.cable || null) : null;
     const clash = ip && (state.ifaces.find(x => x.ip === ip && x.id !== id) || state.devices.find(d => d.mgmtIp === ip && d.id !== deviceId));
     try {
+      if (hwPlan && Object.keys(hwPlan.added).length) {   // put the module in, with the rest of its ports
+        const dv = state.devices.find(x => x.id === deviceId), now = new Date().toISOString();
+        await store.save("devices", deviceId, { ...strip(dv), modules: hwPlan.mods, updatedAt: now });
+        const have = new Set(ifacesOf(deviceId).map(i => i.name.toLowerCase()).concat(name.toLowerCase()));
+        for (const p of hwPorts(dv.model, hwPlan.mods)) if (!have.has(p.name.toLowerCase())) await store.save("interfaces", store.newId(), { ...p, deviceId, updatedAt: now });
+        toast(`${dv.name}: 슬롯 ${Object.keys(hwPlan.added)[0]}에 ${Object.values(hwPlan.added)[0]}를 꽂았습니다.`);
+      }
       await store.save("interfaces", id, body); state.flash = id;
       await syncPeer(id, body, editingIf);
       const auto = $("#i_autopeer").checked ? await autoPeerIp({ id, ...body }) : null;
@@ -4323,6 +4461,8 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     if (act === "show-list") { setView("list"); render(); return; }
     if (act === "cfg-close") { state.cfgOpen = false; render(); return; }
     if (act === "bulk-add") { bulkAdd(); return; }
+    if (act === "hw-tidy") { const d = state.devices.find(x => x.id === state.selected); if (d) hwTidy(d); return; }
+    if (act === "hw-undo") { hwUndoTidy(); return; }
     if (act === "rear") { openRear(state.selected); return; }
     if (act === "cli") { openCli(state.selected); return; }
     if (act === "ptcfg") { openPt(state.selected, "config"); return; }
@@ -4625,6 +4765,16 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       cables++;
     }
     for (const p of ifaces) delete p._clock;
+    // a port the save uses whose module we did not recognise: put the matching module into the empty slot
+    for (const d of devices) {
+      if (!hwEnforced(d)) continue;
+      const mine = ifaces.filter(p => p.deviceId === d.id), real = new Set(hwPorts(d.model, d.modules).map(p => p.name.toLowerCase()));
+      const odd = mine.filter(p => !isLogicalIf(p.ifType, p.ifNum) && !real.has(p.name.toLowerCase())); if (!odd.length) continue;
+      const pl = planPorts(d.model, d.modules, odd.map(p => p.name)); if (!Object.keys(pl.added).length) continue;
+      d.modules = pl.mods; for (const p of odd) if (pl.ok.has(p.name)) p.src = pl.ok.get(p.name);
+      const have = new Set(mine.map(p => p.name.toLowerCase()));
+      for (const q of hwPorts(d.model, pl.mods)) if (!have.has(q.name.toLowerCase())) ifaces.push({ ...q, id: uid(), deviceId: d.id, updatedAt: now });
+    }
     // PT's canvas is denser than ours: spread it so neighbouring devices sit about 330 apart
     const placed = devices.filter(d => typeof d.x === "number");
     if (placed.length) {
