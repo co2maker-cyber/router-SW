@@ -650,6 +650,14 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
 .plan-tools button { flex: none; display: flex; align-items: center; gap: 5px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); cursor: pointer; font-size: 13px; color: var(--fg); white-space: nowrap; }
 .plan-tools button span { font-size: 15px; width: 16px; text-align: center; }
 .plan-tools button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.plan-dims { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--accent-soft); font-size: 13px; }
+.plan-dims[hidden] { display: none; }
+.plan-dims b { font-size: 13px; }
+.plan-dims label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--muted); }
+.plan-dims input { width: 84px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: 14px var(--font-mono); }
+.plan-dims .pd-pre { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.plan-dims .pd-pre button { padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); cursor: pointer; font: 12px var(--font-mono); color: var(--fg); }
+.plan-dims .pd-pre button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
 .plan-body { display: grid; grid-template-columns: minmax(0, 1fr) 320px; }
 .plan-body[hidden] { display: none; }
 .plan-canvas { position: relative; min-width: 0; background: var(--bg); }
@@ -797,6 +805,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       </div>
     </div>
     <div class="plan-tools" id="planTools" role="toolbar" aria-label="그리기 도구"></div>
+    <div class="plan-dims" id="planDims" hidden></div>
     <div class="empty" id="planEmpty" hidden><h3>층이 없습니다</h3><p>층을 추가하면 600 mm 바닥 타일 격자 위에 랙 줄, 벽, 기둥, 항온항습기, UPS, 케이블 트레이를 위에서 내려다본 도면으로 놓을 수 있습니다.</p><button class="btn primary" type="button" id="planAddFloor">+ 층 추가</button></div>
     <div class="plan-body" id="planBody">
       <div class="plan-canvas">
@@ -808,6 +817,18 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     </div>
     <div class="plan-hint" id="planHint">물체를 눌러 고르고 끌어서 옮깁니다. 빈 곳을 끌면 화면이 움직입니다. Shift+누르기로 여러 개 고르기.</div>
   </section>
+  <dialog id="floorDlg"><form id="floorForm">
+    <div class="dlg-head">층 추가 · 공간 크기</div>
+    <div class="dlg-body">
+      <div class="field full"><label for="fl_name">층 이름</label><input id="fl_name" value="1F" maxlength="20"></div>
+      <div class="field"><label for="fl_w">가로 (m)</label><input id="fl_w" inputmode="decimal" value="24"></div>
+      <div class="field"><label for="fl_h">세로 (m)</label><input id="fl_h" inputmode="decimal" value="18"></div>
+      <div class="field"><label for="fl_tile">바닥 타일</label><select id="fl_tile"><option value="600" selected>600 mm</option><option value="500">500 mm</option><option value="1000">1000 mm</option></select></div>
+      <div class="field"><label>면적</label><output id="fl_area" class="mono" style="padding:8px 0">432 m²</output></div>
+      <p class="full hint" style="margin:0;color:var(--muted);font-size:12px">벽 안쪽 치수(전산실 바닥)를 넣으세요. 3–500 m, 0.01 m 단위. 나중에 오른쪽 패널에서 바꿀 수 있습니다.</p>
+    </div>
+    <div class="dlg-foot"><button class="btn" value="cancel" formnovalidate>취소</button><button class="btn primary" value="ok">추가</button></div>
+  </form></dialog>
   <dialog id="rowDlg"><form id="rowForm">
     <div class="dlg-head">랙 줄 놓기</div>
     <div class="dlg-body">
@@ -1227,6 +1248,39 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   };
   const PTOOLS = [["select", "선택", "↖"], ["row", "랙 줄", "▥"], ["rack", "랙", "▯"], ["wall", "벽", "▬"], ["column", "기둥", "■"], ["door", "문", "◜"], ["crac", "항온항습기", "❄"], ["ups", "UPS", "⚡"], ["pdu", "분전반", "⊟"], ["tray", "트레이", "┅"], ["room", "공간", "⬚"], ["label", "글자", "T"], ["measure", "측정", "↔"]];
   const RACK_SIZES = [[600, 1000], [600, 1200], [800, 1000], [800, 1200]];
+  // what each tool's two sizes are called, in which unit they are typed, and common sizes to pick from
+  const PDIM = {
+    wall: { a: "길이", b: "두께", u: "mm", pre: { b: [[100, "100 경량"], [150, "150"], [200, "200 조적"], [300, "300 RC"]] } },
+    column: { a: "가로", b: "세로", u: "mm", pre: { ab: [[400, 400], [500, 500], [600, 600], [800, 800], [1000, 1000]] } },
+    room: { a: "가로", b: "세로", u: "m" }
+  };
+  const pdimOf = t => PDIM[t] || { a: "가로", b: "세로", u: "mm" };
+  PL.dims = {};
+  try { PL.dims = JSON.parse(localStorage.getItem("portbook.pdims") || "{}") || {}; } catch (e) {}
+  const toolSize = t => ({ w: +PL.dims[t]?.w || PTYPES[t].w, d: +PL.dims[t]?.d || PTYPES[t].d });
+  function renderPlanDims() {
+    const bar = $("#planDims"), t = PL.tool;
+    if (!PTYPES[t] || t === "rack") { bar.hidden = true; bar.innerHTML = ""; bar.dataset.tool = ""; return; }
+    const D = pdimOf(t), { w, d } = toolSize(t), k = D.u === "m" ? 1000 : 1, fmt = v => String(Math.round(v / k * 1000) / 1000);
+    if (bar.dataset.tool === t && !bar.hidden && bar.firstChild) {   // same tool: update in place so a click in progress still lands
+      for (const [id, v] of [["#pd_w", w], ["#pd_d", d]]) { const el = $(id); if (el && el !== document.activeElement) el.value = fmt(v); }
+      bar.querySelectorAll("[data-pdpre]").forEach(x => { const o = Object.fromEntries(x.dataset.pdpre.split(",").map(y => y.split(":"))); x.setAttribute("aria-pressed", String((o.w == null || +o.w === w) && (o.d == null || +o.d === d))); });
+      const n = bar.querySelector(".pl-note"); if (n) n.textContent = `${t === "room" ? `= ${Math.round(w * d / 1e5) / 10} m² · ` : ""}이 치수로 놓입니다`;
+      return;
+    }
+    let pre = "";
+    if (D.pre?.b) pre = `<span class="pd-pre" aria-label="${D.b} 빠른 선택">${D.pre.b.map(([v, l]) => `<button type="button" data-pdpre="d:${v}" aria-pressed="${d === v}">${l}</button>`).join("")}</span>`;
+    if (D.pre?.ab) pre = `<span class="pd-pre" aria-label="빠른 선택">${D.pre.ab.map(([a, b]) => `<button type="button" data-pdpre="w:${a},d:${b}" aria-pressed="${w === a && d === b}">${a}×${b}</button>`).join("")}</span>`;
+    bar.dataset.tool = t; bar.hidden = false;
+    bar.innerHTML = `<b>${esc(PTYPES[t].label)} 치수</b>`
+      + `<label>${D.a} <input id="pd_w" inputmode="decimal" value="${fmt(w)}"> ${D.u}</label>`
+      + `<label>${D.b} <input id="pd_d" inputmode="decimal" value="${fmt(d)}"> ${D.u}</label>` + pre
+      + `<span class="pl-note">${t === "room" ? `= ${Math.round(w * d / 1e5) / 10} m² · ` : ""}이 치수로 놓입니다</span>`;
+  }
+  function setToolDim(t, patch) {
+    PL.dims[t] = { ...toolSize(t), ...patch };
+    try { localStorage.setItem("portbook.pdims", JSON.stringify(PL.dims)); } catch (e) {}
+  }
   const CABLE_STD = [1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 70, 100];
   const sortedFloors = () => [...state.floors].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || natCmp(a.name, b.name));
   const curFloor = () => { const fs = sortedFloors(); return fs.find(f => f.id === PL.floor) || fs[0] || null; };
@@ -1355,6 +1409,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     const fs = sortedFloors(), f = curFloor();
     $("#planFloors").innerHTML = fs.map(x => `<button type="button" class="pl-floorbtn" data-floor="${esc(x.id)}" aria-pressed="${x.id === f?.id}">${esc(x.name)}</button>`).join("") + `<button type="button" class="pl-floorbtn pl-addfloor" data-floor="+">+ 층</button>`;
     $("#planTools").innerHTML = PTOOLS.map(([k, l, ic]) => `<button type="button" data-ptool="${k}" aria-pressed="${PL.tool === k}" title="${l}"><span aria-hidden="true">${ic}</span>${l}</button>`).join("");
+    renderPlanDims();
     $("#planSnap").value = String(PL.snap); $("#planAisle").checked = PL.aisle; $("#planCable").checked = PL.cable;
     $("#planUndo").disabled = !PL.undo.length;
     $("#planEmpty").hidden = !!f; $("#planBody").hidden = !f;
@@ -1381,7 +1436,8 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
         + row("X (m)", `<input id="pl_x" inputmode="decimal" value="${(b.x1 / 1000).toFixed(2)}">`) + row("Y (m)", `<input id="pl_y" inputmode="decimal" value="${(b.y1 / 1000).toFixed(2)}">`)
         + (isRack ? row("크기", `<select id="pl_size">${RACK_SIZES.map(([w, d]) => `<option value="${w}x${d}"${it.w === w && it.d === d ? " selected" : ""}>${w} × ${d} mm</option>`).join("")}</select>`)
           + row("높이", `<input id="pl_u" inputmode="numeric" value="${rk.height || 42}"> U`) + row("설계 전력", `<input id="pl_kw" inputmode="decimal" value="${esc(rk.kw ?? "")}" placeholder="예: 5"> kW`)
-          : row("가로 (mm)", `<input id="pl_w" inputmode="numeric" value="${it.w}">`) + row("세로 (mm)", `<input id="pl_d" inputmode="numeric" value="${it.d}">`))
+          : (D => D.u === "m" ? row(`${D.a} (m)`, `<input id="pl_w" data-k="1000" inputmode="decimal" value="${it.w / 1000}">`) + row(`${D.b} (m)`, `<input id="pl_d" data-k="1000" inputmode="decimal" value="${it.d / 1000}">`) + `<p class="pl-note">면적 ${Math.round(it.w * it.d / 1e5) / 10} m²</p>`
+            : row(`${D.a} (mm)`, `<input id="pl_w" inputmode="numeric" value="${it.w}">`) + row(`${D.b} (mm)`, `<input id="pl_d" inputmode="numeric" value="${it.d}">`))(pdimOf(it.type)))
         + row("방향", `<div class="pl-btns"><button type="button" class="btn sm" data-pl="rotl">⟲ 90°</button><button type="button" class="btn sm" data-pl="rotr">⟳ 90°</button><span class="pl-note">${isRack ? "앞면: " + ["아래", "왼쪽", "위", "오른쪽"][((it.rot % 360) + 360) % 360 / 90 | 0] : it.rot + "°"}</span></div>`)
         + (isRack ? `<h4>장비 ${devs.length}대 · ${rackUse(rk)}/${rk.height || 42}U 사용</h4>` + (devs.length ? `<ul class="pl-devs">${devs.map(d => `<li><span class="mono">U${d.rackU}${(d.rackH || 1) > 1 ? "–" + (d.rackU + d.rackH - 1) : ""}</span> ${esc(d.name)}</li>`).join("")}</ul>` : `<p class="pl-note">비어 있습니다. 랙 탭에서 장비를 넣으세요.</p>`)
           + `<div class="pl-btns"><button type="button" class="btn sm" data-pl="openrack">랙 탭에서 보기</button></div>` : "")
@@ -1432,8 +1488,8 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       const it = { type, w: extra.w || T.w, d: extra.d || T.d, rot: extra.rot || 0 }, p = snapItem(it, x, y);
       await planSave([{ col: "racks", id, body: { name, height: extra.height || 42, location: `${f.name} ${tileOf(f, p.x - dims(it).W / 2 + 1, p.y - dims(it).D / 2 + 1)}`, order: Date.now(), floorId: f.id, px: p.x, py: p.y, fw: it.w, fd: it.d, rot: it.rot } }], "랙 추가");
     } else {
-      const it = { type, w: T.w, d: T.d, rot: 0 }, p = snapItem(it, x, y);
-      await planSave([{ col: "planobjs", id, body: { floorId: f.id, type, name: type === "label" ? "글자" : type === "room" ? "공간" : "", x: p.x, y: p.y, w: T.w, d: T.d, rot: 0 } }], PTYPES[type].label + " 추가");
+      const { w, d } = extra.w ? extra : toolSize(type), it = { type, w, d, rot: 0 }, p = snapItem(it, x, y);
+      await planSave([{ col: "planobjs", id, body: { floorId: f.id, type, name: type === "label" ? "글자" : type === "room" ? "공간" : "", x: p.x, y: p.y, w, d, rot: 0 } }], PTYPES[type].label + " 추가");
     }
     PL.sel = new Set([(type === "rack" ? "racks:" : "planobjs:") + id]);
   }
@@ -1558,11 +1614,35 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     if (b.dataset.floor === "+") { await addFloor(); return; }
     PL.floor = b.dataset.floor; PL.sel.clear(); PL.fitNext = true; try { localStorage.setItem("portbook.floor", PL.floor); } catch (err) {} render();
   });
-  async function addFloor() {
-    const fs = sortedFloors(), base = fs.length ? Math.max(0, ...fs.map(f => parseInt(f.name, 10) || 0)) + 1 : 1, id = store.newId(), last = fs[fs.length - 1];
-    await planSave([{ col: "floors", id, body: { name: `${base}F`, order: Date.now(), w: last?.w || 24000, h: last?.h || 18000, tile: last?.tile || 600 } }], "층 추가");
-    PL.floor = id; PL.fitNext = true; try { localStorage.setItem("portbook.floor", id); } catch (err) {} render();
+  function addFloor() {
+    const fs = sortedFloors(), base = fs.length ? Math.max(0, ...fs.map(f => parseInt(f.name, 10) || 0)) + 1 : 1, last = fs[fs.length - 1];
+    $("#fl_name").value = `${base}F`; $("#fl_w").value = (last?.w || 24000) / 1000; $("#fl_h").value = (last?.h || 18000) / 1000; $("#fl_tile").value = String(last?.tile || 600);
+    floorArea(); $("#floorDlg").showModal();
   }
+  function floorArea() { const w = parseFloat($("#fl_w").value), h = parseFloat($("#fl_h").value); $("#fl_area").textContent = w > 0 && h > 0 ? `${Math.round(w * h * 10) / 10} m²` : "–"; }
+  $("#floorForm").addEventListener("input", floorArea);
+  $("#floorForm").addEventListener("submit", async e => {
+    e.preventDefault(); if (e.submitter?.value === "cancel") { $("#floorDlg").close(); return; }
+    const name = $("#fl_name").value.trim(), w = parseFloat($("#fl_w").value), h = parseFloat($("#fl_h").value), tile = +$("#fl_tile").value;
+    if (!name) { toast("층 이름을 넣으세요."); return; }
+    if (state.floors.some(f => f.name.toLowerCase() === name.toLowerCase())) { toast("같은 이름의 층이 있습니다."); return; }
+    if (!(w >= 3 && w <= 500 && h >= 3 && h <= 500)) { toast("가로·세로는 3–500 m입니다."); return; }
+    $("#floorDlg").close();
+    const id = store.newId();
+    await planSave([{ col: "floors", id, body: { name, order: Date.now(), w: Math.round(w * 1000), h: Math.round(h * 1000), tile } }], "층 추가");
+    PL.floor = id; PL.fitNext = true; try { localStorage.setItem("portbook.floor", id); } catch (err) {} render();
+  });
+  // ---- size bar for the tool being placed
+  $("#planDims").addEventListener("change", e => {
+    const t = PL.tool, D = pdimOf(t), k = D.u === "m" ? 1000 : 1, n = Math.round(parseFloat(e.target.value) * k), key = e.target.id === "pd_w" ? "w" : "d";
+    if (!PTYPES[t] || !(n >= 50 && n <= 500000)) { toast(k > 1 ? "0.05–500 m로 넣으세요." : "50–500000 mm로 넣으세요."); e.target.blur(); renderPlanDims(); return; }
+    setToolDim(t, { [key]: n }); e.target.blur(); renderPlanDims();
+  });
+  $("#planDims").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches("input")) { e.preventDefault(); e.target.blur(); } });
+  $("#planDims").addEventListener("click", e => {
+    const b = e.target.closest("[data-pdpre]"); if (!b) return;
+    setToolDim(PL.tool, Object.fromEntries(b.dataset.pdpre.split(",").map(x => { const [k, v] = x.split(":"); return [k, +v]; }))); renderPlanDims();
+  });
   $("#planAddFloor").addEventListener("click", addFloor);
   $("#planSnap").addEventListener("change", e => { PL.snap = +e.target.value; try { localStorage.setItem("portbook.snap", PL.snap); } catch (err) {} });
   $("#planAisle").addEventListener("change", e => { PL.aisle = e.target.checked; try { localStorage.setItem("portbook.aisle", PL.aisle ? "1" : "0"); } catch (err) {} renderPlanSvg(); });
@@ -1603,7 +1683,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       if (it.type === "rack") { if (!v) { toast("랙 이름을 넣으세요."); render(); return; } if (state.racks.some(r => r.id !== it.id && r.name.toLowerCase() === v.toLowerCase())) { toast("같은 이름의 랙이 있습니다."); render(); return; } }
       patch = { name: v };
     } else if (id === "pl_x" || id === "pl_y") { const n = parseFloat(v) * 1000; if (!Number.isFinite(n)) { render(); return; } patch = id === "pl_x" ? { x: n + (it.x - b.x1) } : { y: n + (it.y - b.y1) }; }
-    else if (id === "pl_w" || id === "pl_d") { const n = parseInt(v, 10); if (!(n >= 50 && n <= 100000)) { toast("50–100000 mm"); render(); return; } patch = id === "pl_w" ? { w: n } : { d: n }; }
+    else if (id === "pl_w" || id === "pl_d") { const n = Math.round(parseFloat(v) * (+e.target.dataset.k || 1)); if (!(n >= 50 && n <= 500000)) { toast(e.target.dataset.k ? "0.05–500 m" : "50–500000 mm"); render(); return; } patch = id === "pl_w" ? { w: n } : { d: n }; }
     else if (id === "pl_size") { const [w, d] = v.split("x").map(Number); patch = { w, d }; }
     else if (id === "pl_u") { const n = parseInt(v, 10); if (!(n >= 1 && n <= 60)) { toast("높이는 1–60U"); render(); return; } const over = inRack(it.id).filter(d => d.rackU + (d.rackH || 1) - 1 > n); if (over.length) { toast(`${over.map(d => d.name).join(", ")}이(가) 밖으로 나갑니다.`); render(); return; } patch = { height: n }; }
     else if (id === "pl_kw") { const n = parseFloat(v); patch = { kw: v === "" ? null : Number.isFinite(n) && n >= 0 && n <= 200 ? Math.round(n * 10) / 10 : undefined }; if (patch.kw === undefined) { toast("전력은 0–200 kW"); render(); return; } }
