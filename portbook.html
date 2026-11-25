@@ -403,6 +403,35 @@ dialog form { display: flex; flex-direction: column; }
 .fmenu button:hover, .fmenu button:focus-visible { background: var(--sunk); }
 .fmenu small { color: var(--muted); font-size: 12px; }
 .automenu { position: relative; }
+.simpanel { border-top: 1px solid var(--line); background: var(--panel); padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+.simpanel[hidden] { display: none; }
+.sim-ctl { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; }
+.sim-ctl label { display: inline-flex; gap: 5px; align-items: center; color: var(--muted); font-weight: 600; font-size: 12px; }
+.sim-ctl select, .sim-ctl input:not([type=checkbox]) { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: 12.5px var(--font-mono); max-width: 230px; }
+.sim-ctl #simDstIp { width: 120px; }
+.sim-title { font-size: 13.5px; }
+.sim-kind { font: 12px var(--font-mono); color: var(--muted); border: 1px dashed var(--line); border-radius: 5px; padding: 3px 6px; }
+.sim-status { margin-left: auto; font-weight: 700; font-size: 12.5px; }
+.sim-run { color: var(--accent); } .sim-good { color: var(--up); } .sim-bad { color: var(--down); }
+.sim-ev { max-height: 210px; overflow: auto; }
+.sim-ev table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sim-ev th { position: sticky; top: 0; background: var(--panel); text-align: left; color: var(--muted); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.sim-ev td { padding: 4px 6px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); white-space: nowrap; }
+.sim-ev td:last-child { white-space: normal; font-family: var(--font-body); }
+.sim-ev tr { cursor: pointer; } .sim-ev tr.past td { color: var(--muted); } .sim-ev tr.now td { background: var(--warn-soft); color: var(--fg); }
+.sim-ev tr.fail td { color: var(--down); font-weight: 600; } .sim-ev tr.okrow td { color: var(--up); font-weight: 600; }
+.sim-tag { display: inline-block; border-radius: 4px; padding: 0 6px; font: 700 11px var(--font-mono); color: #fff; }
+.sim-tag.req { background: #7a4fd8; } .sim-tag.rep { background: #1d8a4e; } .sim-tag.arp { background: #b8860b; } .sim-tag.bad { background: var(--down); }
+#topoSvg .sim-trail { fill: none; stroke-width: 9; stroke-linecap: round; opacity: .45; pointer-events: none; }
+#topoSvg .sim-trail.req { stroke: #7a4fd8; } #topoSvg .sim-trail.rep { stroke: #1d8a4e; } #topoSvg .sim-trail.arp { stroke: #b8860b; opacity: .3; }
+#topoSvg .sim-env { pointer-events: none; } #topoSvg .sim-env rect { stroke: #fff; stroke-width: 2; }
+#topoSvg .sim-env path { fill: none; stroke: #fff; stroke-width: 2; }
+#topoSvg .sim-env.req rect { fill: #7a4fd8; } #topoSvg .sim-env.rep rect { fill: #1d8a4e; } #topoSvg .sim-env.arp rect { fill: #b8860b; } #topoSvg .sim-env.bad rect { fill: var(--down); }
+#topoSvg .sim-env .x { stroke-width: 3; }
+#topoSvg .sim-ok { pointer-events: none; } #topoSvg .sim-ok circle { fill: var(--up); } #topoSvg .sim-ok path { fill: none; stroke: #fff; stroke-width: 2.2; }
+#topoSvg .sim-lbl { pointer-events: none; } #topoSvg .sim-lbl rect { fill: var(--panel); stroke: #7a4fd8; } #topoSvg .sim-lbl text { font: 700 12px var(--font-body); fill: #7a4fd8; }
+#topoSvg .sim-lbl.bad rect { stroke: var(--down); } #topoSvg .sim-lbl.bad text { fill: var(--down); }
+#topoSvg .sim-lbl.good rect { stroke: var(--up); } #topoSvg .sim-lbl.good text { fill: var(--up); }
 .automenu .fmenu { width: 250px; }
 .fmenu button[aria-checked="true"] { background: var(--accent-soft); }
 .fmenu button[aria-checked="true"] b::after { content: " ✓"; color: var(--accent); }
@@ -905,6 +934,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       <aside class="cfg" id="cfg" hidden></aside>
       <div class="ctx" id="ctxMenu" role="menu" hidden></div>
     </div>
+    <div class="simpanel" id="simPanel" hidden><div class="sim-ctl"></div><div class="sim-ev"></div></div>
     <div class="topo-info">
       <span id="topoHint"></span>
       <span class="cable-legend">
@@ -2378,7 +2408,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
     svg.setAttribute("viewBox", vb.join(" "));
     const pairN = {}, pairI = {};
     L.forEach(l => { const k = [l.aDev, l.bDev].sort().join("|"); pairN[k] = (pairN[k] || 0) + 1; });
-    let linksSvg = "", labelsSvg = "";
+    let linksSvg = "", labelsSvg = ""; linkGeo.clear();
     for (const l of L) {
       const k = [l.aDev, l.bDev].sort().join("|"), n = pairN[k], i = pairI[k] = (pairI[k] ?? -1) + 1;
       const p1 = pos[l.aDev], p2 = pos[l.bDev], sign = l.aDev < l.bDev ? 1 : -1;
@@ -2386,6 +2416,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       const off = (i - (n - 1) / 2) * 44 * sign;
       const c = { x: (p1.x + p2.x) / 2 + nx * off * 2, y: (p1.y + p2.y) / 2 + ny * off * 2 };
       const q = t => ({ x: (1 - t) ** 2 * p1.x + 2 * (1 - t) * t * c.x + t * t * p2.x, y: (1 - t) ** 2 * p1.y + 2 * (1 - t) * t * c.y + t * t * p2.y });
+      if (l.b) linkGeo.set(l.a.id + "|" + l.b.id, { p1, c, p2 });
       const cab = l.a.cable || l.b?.cable || null, ck = cab?.kind || "unknown";
       const fcol = ck === "fiber" ? (FO[cab.grade]?.color || "#1fb3c4") : "";
       linksSvg += `<path class="link ${ck} st-${linkState(l.a, l.b)}" ${fcol ? `style="stroke:${fcol}"` : ""} d="M${p1.x},${p1.y} Q${c.x},${c.y} ${p2.x},${p2.y}"><title>${esc(l.a.name)} ↔ ${esc(l.b ? l.b.name : devName(l.bDev))}${cab ? " · " + esc(cableLong(cab)) : ""}</title></path>`;
@@ -2409,8 +2440,11 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
       const a = pos[state.tool.aDev], c = state.cursor || a;
       rubber = `<line id="rubber" class="rubber" x1="${a.x}" y1="${a.y}" x2="${c.x}" y2="${c.y}"/>`;
     }
-    svg.innerHTML = linksSvg + rubber + nodesSvg + labelsSvg;
+    svg.innerHTML = linksSvg + rubber + nodesSvg + labelsSvg + `<g id="simG">${simSvg()}</g>`;
+    renderSimPanel();
+    if (SIM.pending && state.view === "topo" && !document.querySelector("dialog[open]")) { SIM.pending = false; setTimeout(() => simPlay(), 300); }
   }
+  const linkGeo = new Map();
   function svgPt(e) { const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; return pt.matrixTransform(svg.getScreenCTM().inverse()); }
   // --- palette: drag a device onto the canvas, or click it and then click the canvas ---
   const PAL = [["router", "라우터"], ["l3switch", "L3 스위치"], ["switch", "L2 스위치"], ["firewall", "방화벽"], ["other", "기타"]];
@@ -2418,7 +2452,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   const cableIcon = '<path d="M-26,8 C-10,8 -8,-8 8,-8 H26" fill="none" stroke="var(--fg)" stroke-width="3" stroke-linecap="round"/><circle cx="-26" cy="8" r="4" fill="var(--up)"/><circle cx="26" cy="-8" r="4" fill="var(--up)"/>';
   $("#palette").innerHTML = '<span class="label" style="align-self:center;margin-right:2px">장비</span>' +
     PAL.map(([k, t]) => `<button type="button" class="pal" data-place="${k}" aria-pressed="false" title="${t}: 캔버스로 끌어 놓기"><svg viewBox="-34 -32 68 64">${nodeIcon(k)}</svg>${t}</button>`).join("") +
-    `<span class="pal-sep"></span><button type="button" class="pal" data-tool="cable" aria-pressed="false" title="케이블로 두 장비 연결"><svg viewBox="-34 -32 68 64">${cableIcon}</svg>케이블</button>`;
+    `<span class="pal-sep"></span><button type="button" class="pal" data-tool="cable" aria-pressed="false" title="케이블로 두 장비 연결"><svg viewBox="-34 -32 68 64">${cableIcon}</svg>케이블</button><button type="button" class="pal" data-tool="pdu" aria-pressed="false" title="패킷 보내기: 출발 장비 → 도착 장비"><svg viewBox="-34 -32 68 64"><rect x="-22" y="-15" width="44" height="30" rx="4" fill="#7a4fd8"/><path d="M-22 -13 L0 4 L22 -13" fill="none" stroke="#fff" stroke-width="3.5"/></svg>패킷</button>`;
   let pal = null;
   $("#palette").addEventListener("pointerdown", e => {
     const b = e.target.closest("[data-place]"); if (!b) return;
@@ -2440,6 +2474,7 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   });
   $("#palette").addEventListener("click", e => {
     if (e.target.closest("[data-tool=cable]")) setTool(state.tool?.kind === "cable" ? null : { kind: "cable", step: 1 });
+    if (e.target.closest("[data-tool=pdu]")) { const on = state.tool?.kind === "pdu"; setTool(on ? null : { kind: "pdu", step: 1 }); if (!on) { SIM.open = true; renderSimPanel(); } }
   });
   document.addEventListener("keydown", e => {
     if (e.key === "Escape" && state.tool && !document.querySelector("dialog[open]")) setTool(null);
@@ -2447,12 +2482,13 @@ button, [role="tab"], .pal, .node { -webkit-tap-highlight-color: transparent; to
   function setTool(t) {
     state.tool = t; state.cursor = null;
     document.querySelectorAll("#palette .pal").forEach(b => b.setAttribute("aria-pressed", String(
-      (t?.kind === "place" && b.dataset.place === t.devKind) || (t?.kind === "cable" && b.dataset.tool === "cable"))));
+      (t?.kind === "place" && b.dataset.place === t.devKind) || (t?.kind === "cable" && b.dataset.tool === "cable") || (t?.kind === "pdu" && b.dataset.tool === "pdu"))));
     updateHint(); renderTopo();
   }
   function updateHint() {
     const t = state.tool, h = $("#topoHint");
     if (!t) h.textContent = "장비를 끌어다 놓으면 모델을 고르고, 눌러서 설정합니다. 장비나 케이블을 길게 누르면 수정·삭제 메뉴가 나옵니다.";
+    else if (t.kind === "pdu") h.textContent = t.step === 1 ? "패킷: 출발 장비를 누르세요 · Esc 종료" : `패킷: ${devName(t.src)} → 도착 장비를 누르세요 (IP 직접 입력은 아래 패널) · Esc 취소`;
     else if (t.kind === "place") h.textContent = `${PAL.find(p => p[0] === t.devKind)[1]}: 캔버스에서 놓을 곳을 누르세요 · Esc 취소`;
     else if (t.step === 1) h.textContent = "케이블: 연결할 첫 번째 장비를 누르세요 · 기존 케이블을 누르면 제거 · Esc 종료";
     else { const a = state.ifaces.find(x => x.id === t.a); h.textContent = `케이블: ${devName(t.aDev)} ${a ? abbr(a.name) : ""} → 반대쪽 장비를 누르세요 · Esc 취소`; }
@@ -3906,6 +3942,7 @@ render();       toast("정리 전으로 되돌렸습니다.");
     if (!state.tool && lastTap.id && Date.now() - lastTap.t < 420 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) { const id = lastTap.id; lastTap = { id: null, t: 0 }; openPt(id, "config"); return; }
     if (state.tool?.kind === "place") { if (!g.node) placeDevice(state.tool.devKind, g.pt); return; }
     if (state.tool?.kind === "cable") { if (g.node) cableClick(g.node); else if (g.hit) editCable(g.hit); return; }
+    if (state.tool?.kind === "pdu") { if (g.node) pduClick(g.node); return; }
     if (g.lbl) { openMemo(g.lbl); return; }
     if (g.hit) editCable(g.hit);
   });
@@ -3916,7 +3953,7 @@ render();       toast("정리 전으로 되돌렸습니다.");
     if (t.type === "node") {
       const d = state.devices.find(x => x.id === t.id); if (!d) return;
       head = `<div class="hd"><b>${esc(d.name)}</b>${esc([KIND[d.kind], d.model].filter(Boolean).join(" · "))}</div>`;
-      items = [["ptcfg", "설정 창 (Physical · Config · CLI)"], ["edit-dev", "수정 (이름 · 모델 · 관리 IP)"], ["open-cfg", "포트 설정 열기"], ...(cliCapable(d) ? [["cli", CLI_OK_KINDS.includes(d.kind) ? "CLI로 설정 (IOS 명령)" : "Command Prompt (ipconfig · ping)"]] : []), ["rear", "포트 패널 그림 보기"], ["start-cable", "여기서 케이블 연결"], ["pytop", d.pyTop ? "▲ 피라미드 꼭대기 (지금) · 다시 배치" : "▲ 피라미드 꼭대기로"], ["del-dev", "삭제", "danger"]];
+      items = [["ptcfg", "설정 창 (Physical · Config · CLI)"], ["edit-dev", "수정 (이름 · 모델 · 관리 IP)"], ["open-cfg", "포트 설정 열기"], ...(cliCapable(d) ? [["cli", CLI_OK_KINDS.includes(d.kind) ? "CLI로 설정 (IOS 명령)" : "Command Prompt (ipconfig · ping)"]] : []), ["rear", "포트 패널 그림 보기"], ["start-cable", "여기서 케이블 연결"], ...(ifacesOf(d.id).some(i => i.ip) ? [["sim", "✉ 여기서 ping 보내기 (애니메이션)"]] : []), ["pytop", d.pyTop ? "▲ 피라미드 꼭대기 (지금) · 다시 배치" : "▲ 피라미드 꼭대기로"], ["del-dev", "삭제", "danger"]];
     } else {
       const A = state.ifaces.find(x => x.id === t.id); if (!A) return;
       const B = A.peerIfId ? state.ifaces.find(x => x.id === A.peerIfId) : null;
@@ -3941,6 +3978,7 @@ render();       toast("정리 전으로 되돌렸습니다.");
     else if (act === "start-cable") { setTool({ kind: "cable", step: 1 }); cableClick(id); }
     else if (act === "del-dev") askDeleteDevice(id);
     else if (act === "pytop") setPyTop(id);
+    else if (act === "sim") { SIM.open = true; SIM.src = id; SIM.dst = ""; SIM.steps = []; SIM.ok = null; SIM.fail = null; setTool({ kind: "pdu", step: 2, src: id }); renderSimPanel(); $("#simDst")?.focus(); }
     else if (act === "edit-port") { const i = state.ifaces.find(x => x.id === id); if (i) openIf(i); }
     else if (act === "edit-cable") editCable(id);
     else if (act === "memo") openMemo(id);
@@ -3998,6 +4036,7 @@ render();       toast("정리 전으로 되돌렸습니다.");
     const g = e.target.closest?.(".node"); if (!g) return;
     if (e.key === "Enter" || e.key === " ") {
       if (state.tool?.kind === "cable") { cableClick(g.dataset.node); e.preventDefault(); return; }
+      if (state.tool?.kind === "pdu") { pduClick(g.dataset.node); e.preventDefault(); return; }
       state.selected = g.dataset.node; state.cfgOpen = true; remember(); renderTopo(); svg.querySelector(`[data-node="${CSS.escape(g.dataset.node)}"]`)?.focus(); e.preventDefault(); }
   });
   async function runAuto(mode) {
@@ -5852,6 +5891,7 @@ render();       toast("정리 전으로 되돌렸습니다.");
       const dst = args[0]; if (!dst || !ipRe.test(dst)) { cliOut(cmd === "ping" ? "Ping request could not find host. Please check the name and try again." : "Unable to resolve target system name.", "cli-err"); return; }
       if (!nic?.ip) { cliOut(cmd === "ping" ? `Pinging ${dst} with 32 bytes of data:` : `Tracing route to ${dst}`); cliOut(""); for (let k = 0; k < (cmd === "ping" ? n : 1); k++) cliOut("Request timed out."); cliOut(""); cliOut("(이 PC에 IP가 없습니다. ipconfig 로 IP를 정하세요)", "cli-warn"); return; }
       const r = pingResult(d, dst, nic.ip);
+      if (cmd === "ping") simFromCli(d.id, dst);
       if (cmd === "tracert") {
         cliOut(""); cliOut(`Tracing route to ${dst} over a maximum of 30 hops: `); cliOut("");
         (r.ok ? r.hops.length ? r.hops : [dst] : r.hops).forEach((h, k) => cliOut(`  ${String(k + 1).padEnd(3)} 0 ms      0 ms      0 ms      ${h}`));
@@ -5881,10 +5921,275 @@ render();       toast("정리 전으로 되돌렸습니다.");
       : w === "noip" ? "(출발 장비에 쓸 수 있는 IP가 없습니다)"
       : "(응답이 오지 않습니다. 케이블·포트 켜짐·VLAN·IP 대역·게이트웨이·돌아오는 경로를 확인하세요)";
   }
+  // ---------- packet simulation: the same rules as ping, walked cable by cable so it can be animated ----------
+  const SIM = { open: false, src: "", dst: "", steps: [], i: 0, t: 0, playing: false, stopAt: null, speed: 1, ok: null, fail: null, last: 0, cli: true };
+  try { SIM.speed = +(localStorage.getItem("portbook.simSpeed") || 1) || 1; SIM.cli = localStorage.getItem("portbook.simCli") !== "0"; } catch (e) {}
+  const simArp = new Set();
+  const simVlist = v => { const out = new Set(); for (const part of String(v || "").split(",")) { const m = part.trim().match(/^(\d+)(?:-(\d+))?$/); if (m) for (let x = +m[1]; x <= +(m[2] || m[1]) && x - +m[1] < 4095; x++) out.add(x); } return out; };
+  const simIsSw = d => d && ["switch", "l3switch"].includes(d.kind);
+  const simDev = id => state.devices.find(d => d.id === id);
+  const simIf = id => state.ifaces.find(x => x.id === id);
+  // the physical port an L3 interface sends from, and the 802.1Q tag it uses ("u" = none); an SVI starts inside its switch
+  function simStart(i) {
+    const d = simDev(i.deviceId);
+    if (simIsSw(d) && ifTypeOf(i) === "Vlan") return { sw: d.id, vlan: +ifNumOf(i) };
+    if (ifNumOf(i).includes(".")) { const p = state.ifaces.find(x => x.deviceId === i.deviceId && ifNumOf(x) === ifNumOf(i).split(".")[0] && ifTypeOf(x) === ifTypeOf(i)); return p ? { port: p, tag: i.vlan ? String(i.vlan) : "u" } : null; }
+    return { port: i, tag: "u" };
+  }
+  // where a frame with tag t lands when it comes in on port q
+  function simLand(q, t) {
+    const d = simDev(q.deviceId);
+    if (simIsSw(d) && q.mode === "access") return t === "u" ? { sw: d.id, vlan: +(q.vlan || 1) } : { bad: `${d.name} ${abbr(q.name)}는 access 포트라 VLAN ${t} 태그 프레임을 버림` };
+    if (simIsSw(d) && q.mode === "trunk") { if (t === "u") return { sw: d.id, vlan: 1 }; return !q.vlan || simVlist(q.vlan).has(+t) ? { sw: d.id, vlan: +t } : { bad: `${d.name} ${abbr(q.name)} trunk에 VLAN ${t}이(가) 허용되지 않음` }; }
+    if (simIsSw(d)) return { sw: d.id, vlan: 1 };
+    if (t === "u") return { l3: q };
+    const s = state.ifaces.find(x => x.deviceId === q.deviceId && ifNumOf(x).startsWith(ifNumOf(q) + ".") && String(x.vlan) === String(t));
+    return s ? { l3: s } : { bad: `${d.name} ${abbr(q.name)}에 VLAN ${t} 하위 인터페이스가 없음` };
+  }
+  const simTagOut = (p, vlan) => p.mode === "trunk" ? (vlan === 1 ? "u" : String(vlan)) : "u";
+  const simCarries = (p, vlan) => p.mode === "access" ? +(p.vlan || 1) === vlan : p.mode === "trunk" ? !p.vlan || simVlist(p.vlan).has(vlan) : vlan === 1;
+  const linkUp = (p, q) => p.status === "up" && q.status === "up";
+  // L2 path from L3 interface a to L3 interface b: [{ out, in, vlan }] (vlan = the VLAN inside the switch it arrives at)
+  function simL2(a, b, strict = true) {
+    const st = simStart(a); if (!st) return null;
+    const tgtSvi = ifTypeOf(b) === "Vlan" && simIsSw(simDev(b.deviceId)) ? { sw: b.deviceId, vlan: +ifNumOf(b) } : null;
+    const q0 = [], seen = new Set();
+    const push = (port, tag, path) => { const k = port.id + "/" + tag; if (seen.has(k)) return; seen.add(k); q0.push({ port, tag, path }); };
+    const fromSwitch = (sw, vlan, path, inPort) => {
+      if (tgtSvi && tgtSvi.sw === sw && tgtSvi.vlan === vlan) return path;
+      for (const p of state.ifaces) if (p.deviceId === sw && p !== inPort && p.peerIfId && /^[\d/]+$/.test(ifNumOf(p)) && simCarries(p, vlan)) push(p, simTagOut(p, vlan), path);
+      return null;
+    };
+    if (st.sw) { const r = fromSwitch(st.sw, st.vlan, [], null); if (r) return r; } else push(st.port, st.tag, []);
+    while (q0.length) {
+      const { port, tag, path } = q0.shift(), q = simIf(port.peerIfId); if (!q) continue;
+      if (strict && !linkUp(port, q)) continue;
+      const land = simLand(q, tag); if (land.bad) continue;
+      const hop = { out: port, in: q, vlan: land.sw ? land.vlan : null }, np = [...path, hop];
+      if (land.l3) { if (land.l3.id === b.id) return np; continue; }
+      const r = fromSwitch(land.sw, land.vlan, np, q); if (r) return r;
+      if (path.length > 40) break;
+    }
+    return null;
+  }
+  // nothing got through: follow the cables anyway and say where and why it stops
+  function simDiagnose(a, nh) {
+    const tgt = state.ifaces.find(x => x.ip === nh && x.status !== "admin-down") || state.ifaces.find(x => x.ip === nh);
+    const sd = simDev(a.deviceId);
+    if (!tgt) return { hops: [], at: sd, why: `${nh}을(를) 쓰는 장비가 없습니다. IP·게이트웨이를 확인하세요.` };
+    const tp = simStart(tgt), st = simStart(a); if (!st) return { hops: [], at: sd, why: "출발 포트를 찾지 못했습니다." };
+    if (tgt.status === "admin-down") return { hops: [], at: simDev(tgt.deviceId), why: `${simDev(tgt.deviceId)?.name} ${abbr(tgt.name)}이(가) shutdown 상태입니다.`, far: true };
+    // shortest cable route ignoring every rule, through switches only
+    const goal = tp?.port?.id, goalSw = tp?.sw, prev = new Map(), Q = [];
+    const startPorts = st.sw ? state.ifaces.filter(p => p.deviceId === st.sw && p.peerIfId) : [st.port];
+    for (const p of startPorts) if (p.peerIfId) { prev.set(p.id, null); Q.push(p); }
+    let end = null;
+    while (Q.length && !end) {
+      const p = Q.shift(), q = simIf(p.peerIfId); if (!q) continue;
+      if (q.id === goal || (goalSw && q.deviceId === goalSw)) { end = { p, q }; break; }
+      if (!simIsSw(simDev(q.deviceId))) continue;
+      for (const n of state.ifaces) if (n.deviceId === q.deviceId && n.id !== q.id && n.peerIfId && !prev.has(n.id)) { prev.set(n.id, { from: p, inq: q }); Q.push(n); }
+    }
+    if (!end) return { hops: [], at: sd, why: `${sd?.name}에서 ${simDev(tgt.deviceId)?.name}(${nh})까지 케이블로 이어져 있지 않습니다.` };
+    const chain = []; let cur = end.p; chain.unshift({ out: end.p, in: end.q }); while (prev.get(cur.id)) { const pr = prev.get(cur.id); chain.unshift({ out: pr.from, in: pr.inq }); cur = pr.from; }
+    // walk it with the rules, stop at the first one broken
+    let tag = st.sw ? null : st.tag, vlan = st.sw ? st.vlan : null; const hops = [];
+    for (const h of chain) {
+      if (vlan != null) { if (!simCarries(h.out, vlan)) return { hops, at: simDev(h.out.deviceId), why: `${simDev(h.out.deviceId).name} ${abbr(h.out.name)}은(는) ${h.out.mode === "access" ? `VLAN ${h.out.vlan || 1}` : h.out.mode === "trunk" ? `trunk(허용 ${h.out.vlan || "전체"})` : "다른 모드"}라 VLAN ${vlan} 프레임이 나가지 못합니다.` }; tag = simTagOut(h.out, vlan); }
+      if (h.out.status !== "up" || h.in.status !== "up") { const bad = h.out.status !== "up" ? h.out : h.in; return { hops, at: simDev(h.out.deviceId), why: `${simDev(bad.deviceId).name} ${abbr(bad.name)} 링크가 ${bad.status === "admin-down" ? "shutdown" : "down"} 상태입니다.` }; }
+      const land = simLand(h.in, tag); hops.push({ out: h.out, in: h.in, vlan: land.sw ? land.vlan : null });
+      if (land.bad) return { hops, at: simDev(h.in.deviceId), why: land.bad + "." };
+      vlan = land.sw ? land.vlan : null;
+    }
+    if (tgtSviMismatch(tgt, vlan)) return { hops, at: simDev(tgt.deviceId), why: `${simDev(tgt.deviceId).name}의 Vlan${ifNumOf(tgt)}과(와) 들어온 VLAN ${vlan}이(가) 다릅니다.` };
+    const from = state.ifaces.find(x => x.id === a.id);
+    if (from && tgt.prefix != null && from.prefix != null && !inNet(tgt.ip, from.ip, from.prefix)) return { hops, at: simDev(tgt.deviceId), why: `${nh}은(는) ${simDev(a.deviceId).name}(${from.ip}/${from.prefix})와 다른 대역입니다.` };
+    return { hops, at: simDev(tgt.deviceId), why: "응답할 수 없는 상태입니다 (포트·IP 확인)." };
+  }
+  const tgtSviMismatch = (tgt, vlan) => ifTypeOf(tgt) === "Vlan" && vlan != null && +ifNumOf(tgt) !== vlan;
+  function routeKind(dev, dst, eg) {
+    if (inNet(dst, eg.i.ip, eg.i.prefix)) return "직접 연결";
+    if ((dev.cliExtra || []).some(l => { const m = l.match(/^ip route\s+(\S+)\s+(\S+)/i); const p = m && parsePrefix(m[2]); return m && p != null && !Number.isNaN(p) && inNet(dst, m[1], p); })) return "정적 경로";
+    const b = protoBlocks(dev)[0]; return b ? `${b.p.toUpperCase()} 경로` : "경로";
+  }
+  // one direction: L3 segments, each turned into cable hops; failure says where
+  function simLeg(M, fromDev, dst, srcIp, type, out) {
+    let dev = fromDev;
+    for (let ttl = 0; ttl < 30; ttl++) {
+      if (M.l3.some(x => x.dev.id === dev.id && x.i.ip === dst)) return { ok: true, dev };
+      let eg, nh;
+      if (!routerish(dev)) {
+        const nic = M.l3.find(x => x.dev.id === dev.id && (!srcIp || x.i.ip === srcIp)) || M.l3.find(x => x.dev.id === dev.id);
+        if (!nic) { const any = ifacesOf(dev.id).find(i => i.ip); return { ok: false, at: dev, why: any ? `${dev.name} ${abbr(any.name)} 포트가 ${any.status === "admin-down" ? "꺼져(shutdown) 있습니다" : "연결되지 않았습니다 (케이블·반대쪽 포트 확인)"}.` : `${dev.name}에 IP가 없습니다.` }; }
+        eg = nic; nh = inNet(dst, nic.i.ip, nic.i.prefix) ? dst : hostGw(dev);
+        if (!nh) return { ok: false, at: dev, why: `${dst}은(는) 다른 대역인데 ${dev.name}에 기본 게이트웨이가 없습니다.` };
+      } else {
+        const r = routeAt(M, dev, dst); if (!r) return { ok: false, at: dev, why: `${dev.name}에 ${dst}(으)로 가는 경로가 없습니다. ip route 또는 RIP/OSPF를 설정하세요.`, unreach: true };
+        [eg, nh] = r;
+      }
+      const next = M.l3.find(x => x.i.ip === nh && x.dom === eg.dom && x !== eg);
+      if (!next || next.dev.id === dev.id) {
+        const dg = simDiagnose(eg.i, nh); dg.hops.forEach(h => out.push({ type, h }));
+        return { ok: false, at: dg.at || dev, why: dg.why };
+      }
+      const hops = simL2(eg.i, next.i) || [];
+      const ak = eg.i.id + ">" + nh;
+      if (!simArp.has(ak)) { simArp.add(ak); hops.forEach(h => out.push({ type: "arp", h, nh })); for (let j = hops.length - 1; j >= 0; j--) out.push({ type: "arpr", h: { out: hops[j].in, in: hops[j].out, vlan: j ? hops[j - 1].vlan : null }, nh }); }
+      hops.forEach((h, k) => out.push({ type, h, last: k === hops.length - 1, node: next, dst }));
+      if (!routerish(next.dev) && next.i.ip !== dst) return { ok: false, at: next.dev, why: `${next.dev.name}은(는) 라우터가 아니라 패킷을 넘겨주지 않습니다 (게이트웨이 설정 확인).` };
+      dev = next.dev;
+    }
+    return { ok: false, at: dev, why: "TTL이 다 됐습니다 (경로가 돌고 있습니다)." };
+  }
+  function simBuild(srcId, dst) {
+    const M = netModel(), d = simDev(srcId), steps = [];
+    if (!d || !ipRe.test(dst || "")) return { steps, ok: false, fail: { at: d, why: "출발 장비와 도착 IP를 고르세요." } };
+    const nic = routerish(d) ? null : (M.l3.find(x => x.dev.id === d.id) || null);
+    const go = simLeg(M, d, dst, nic?.i.ip, "req", steps);
+    if (!go.ok) return { steps, ok: false, fail: go };
+    if (go.dev.id === d.id) return { steps, ok: true, self: true };
+    const src = nic?.i.ip || routeAt(M, d, dst)?.[0]?.i.ip || (M.l3.find(x => x.dev.id === d.id) || {}).i?.ip;
+    const back = simLeg(M, go.dev, src, dst, "rep", steps);
+    if (!back.ok) return { steps, ok: false, fail: back };
+    return { steps, ok: true };
+  }
+  // the words in the event list for arriving at a device
+  function simNote(s, k, steps) {
+    const h = s.h, at = simDev(h.in.deviceId), nx = steps[k + 1];
+    const inTxt = `${abbr(h.in.name)}${h.vlan != null ? `(VLAN ${h.vlan})` : ""} 들어옴`;
+    if (s.type === "arp" || s.type === "arpr") {
+      if (simIsSw(at) && nx && nx.type === s.type && nx.h.out.deviceId === at.id) return `${inTxt} → ${abbr(nx.h.out.name)}로 넘김`;
+      return s.type === "arp" ? `ARP 요청 받음: ${s.nh}의 MAC을 알려줌` : `ARP 응답 받음: ${s.nh}의 MAC을 알아냄`;
+    }
+    if (nx && nx.type === s.type && nx.h.out.deviceId === at.id && !(s.last)) return `${inTxt} → ${abbr(nx.h.out.name)}${nx.h.out.mode === "trunk" ? " trunk" : ""}로 내보냄`;
+    if (s.last && s.node && s.node.i.ip === s.dst) return s.type === "req" ? `${inTxt} · 목적지 도착 → Echo Reply를 돌려보냄` : `${inTxt} · 응답 도착 → ping 성공`;
+    if (s.last && s.node) { const M = netModel(), r = routeAt(M, at, s.dst); return r ? `${inTxt} · ${s.dst} → ${abbr(r[0].i.name)} (${routeKind(at, s.dst, r[0])})` : inTxt; }
+    return inTxt;
+  }
+  // ---- packet simulation: player, drawing on the topology, panel
+  const SIM_T = { arp: ["ARP", "arp"], arpr: ["ARP", "arp"], req: ["ICMP", "req"], rep: ["ICMP", "rep"] };
+  const simLabel = s => s.type === "arp" ? "ARP Request" : s.type === "arpr" ? "ARP Reply" : s.type === "req" ? "ICMP Echo Request" : "ICMP Echo Reply";
+  const envSvg = (x, y, cls, extra = "") => `<g class="sim-env ${cls}" transform="translate(${x} ${y})"><rect x="-15" y="-10" width="30" height="20" rx="3"/><path d="M-15 -9 L0 3 L15 -9"/>${extra}</g>`;
+  function simGeo(h) {
+    const g = linkGeo.get(h.out.id + "|" + h.in.id); if (g) return g;
+    const r = linkGeo.get(h.in.id + "|" + h.out.id); if (r) return { p1: r.p2, c: r.c, p2: r.p1 };
+    const pos = positions(), a = pos[h.out.deviceId], b = pos[h.in.deviceId]; if (!a || !b) return null;
+    return { p1: a, c: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, p2: b };
+  }
+  const qAt = (g, t) => ({ x: (1 - t) ** 2 * g.p1.x + 2 * (1 - t) * t * g.c.x + t * t * g.p2.x, y: (1 - t) ** 2 * g.p1.y + 2 * (1 - t) * t * g.c.y + t * t * g.p2.y });
+  function simSvg() {
+    if (!SIM.steps.length && !SIM.fail && SIM.ok == null) return "";
+    const pos = positions(), n = SIM.steps.length, upto = Math.min(SIM.i, n); let g = "";
+    const visited = new Set(SIM.src ? [SIM.src] : []);
+    for (let k = 0; k < upto; k++) { const s = SIM.steps[k], ge = simGeo(s.h); if (ge) g += `<path class="sim-trail ${SIM_T[s.type][1]}" d="M${ge.p1.x},${ge.p1.y} Q${ge.c.x},${ge.c.y} ${ge.p2.x},${ge.p2.y}"/>`; visited.add(s.h.in.deviceId); }
+    const done = SIM.i >= n, failAt = done && SIM.fail?.at?.id;
+    for (const id of visited) { const p = pos[id]; if (!p || id === failAt) continue; g += `<g class="sim-ok" transform="translate(${p.x + 26} ${p.y - 26})"><circle r="9"/><path d="M-5 0 l3.5 3.5 l6.5 -7"/></g>`; }
+    if (!done) {
+      const s = SIM.steps[SIM.i], ge = simGeo(s.h);
+      if (ge) { const p = qAt(ge, Math.min(1, SIM.t)); g += envSvg(p.x, p.y, SIM_T[s.type][1]) + `<g class="sim-lbl" transform="translate(${p.x + 22} ${p.y - 30})"><rect width="${simLabel(s).length * 7.4 + 16}" height="22" rx="5"/><text x="8" y="15">${simLabel(s)}</text></g>`; }
+    } else if (SIM.fail?.at && pos[SIM.fail.at.id]) {
+      const p = pos[SIM.fail.at.id], why = SIM.fail.why || "", short = why.length > 38 ? why.slice(0, 37) + "…" : why;
+      g += envSvg(p.x + 30, p.y - 30, "bad", `<path class="x" d="M-8 -7 l16 14 M8 -7 l-16 14"/>`) + `<g class="sim-lbl bad" transform="translate(${p.x + 50} ${p.y - 42})"><rect width="${short.length * 11 + 16}" height="24" rx="5"/><text x="8" y="16">${esc(short)}</text></g>`;
+    } else if (SIM.ok && pos[SIM.src]) {
+      const p = pos[SIM.src]; g += `<g class="sim-lbl good" transform="translate(${p.x + 40} ${p.y - 48})"><rect width="${SIM.self ? 150 : 120}" height="24" rx="5"/><text x="8" y="16">✓ ping 성공${SIM.self ? " (자기 자신)" : ""}</text></g>`;
+    }
+    return g;
+  }
+  const simDraw = () => { const el = svg.querySelector("#simG"); if (el) el.innerHTML = simSvg(); };
+  let simRaf = 0;
+  function simLoop(ts) {
+    simRaf = 0; if (!SIM.playing) return;
+    const dt = SIM.last ? Math.min(100, ts - SIM.last) : 16; SIM.last = ts;
+    SIM.t += dt / (750 / SIM.speed);
+    let stepChanged = false;
+    while (SIM.t >= 1 && SIM.i < SIM.steps.length) { SIM.t -= 1; SIM.i++; stepChanged = true; if (SIM.stopAt != null && SIM.i >= SIM.stopAt) { SIM.playing = false; SIM.t = 0; break; } }
+    if (SIM.i >= SIM.steps.length) { SIM.playing = false; SIM.t = 0; }
+    simDraw(); if (stepChanged || !SIM.playing) renderSimPanel();
+    if (SIM.playing) simRaf = requestAnimationFrame(simLoop);
+  }
+  function simPlay(stopAt = null) {
+    if (SIM.i >= SIM.steps.length) { SIM.i = 0; SIM.t = 0; }
+    SIM.stopAt = stopAt; SIM.playing = true; SIM.last = 0; renderSimPanel();
+    if (!simRaf) simRaf = requestAnimationFrame(simLoop);
+  }
+  function simSend(src, dst, play = true) {
+    SIM.open = true; SIM.src = src; SIM.dst = dst;
+    const r = simBuild(src, dst);
+    Object.assign(SIM, { steps: r.steps, ok: r.ok, fail: r.ok ? null : r.fail, self: !!r.self, i: 0, t: 0, playing: false });
+    renderSimPanel(); simDraw();
+    if (play && state.view === "topo") simPlay(); else if (!r.steps.length) { SIM.i = 0; renderSimPanel(); simDraw(); }
+  }
+  function simFromCli(devId, dst) {
+    if (!SIM.cli) return;
+    SIM.open = true; SIM.src = devId; SIM.dst = dst;
+    const r = simBuild(devId, dst);
+    Object.assign(SIM, { steps: r.steps, ok: r.ok, fail: r.ok ? null : r.fail, self: !!r.self, i: 0, t: 0, playing: false });
+    if (state.view === "topo" && !document.querySelector("dialog[open]")) simPlay(); else { SIM.pending = true; renderSimPanel(); }
+  }
+  const simIps = () => {
+    const out = [];
+    for (const d of sortedDevices()) for (const i of ifacesOf(d.id)) if (i.ip && ipRe.test(i.ip)) out.push({ d, i });
+    return out;
+  };
+  const devIp = id => { const M = netModel(); return (M.l3.find(x => x.dev.id === id) || {}).i?.ip || ifacesOf(id).find(i => i.ip)?.ip || ""; };
+  function renderSimPanel() {
+    const el = $("#simPanel"); if (!el) return;
+    el.hidden = !SIM.open; if (!SIM.open) return;
+    const ae = document.activeElement, keepCtl = ae && el.contains(ae) && ae.matches("select,input");
+    const n = SIM.steps.length, done = SIM.i >= n, cur = SIM.playing ? SIM.i : Math.min(SIM.i, n) - 1;
+    const status = !SIM.dst ? `<span class="muted">출발과 도착을 고르고 ▶ 보내기</span>`
+      : !done ? (SIM.playing ? `<span class="sim-run">진행 중 · ${Math.min(SIM.i + 1, n)}/${n} 단계</span>` : `<span class="sim-run">⏸ ${SIM.i ? `멈춤 · ${SIM.i}/${n} 단계` : `준비됨 · ${n}단계`}</span>`)
+      : SIM.ok ? `<span class="sim-good">✓ 성공 · ${n}단계</span>` : `<span class="sim-bad">✗ ${esc(SIM.fail?.at?.name || "")}에서 멈춤</span>`;
+    if (!keepCtl) {
+      const srcs = sortedDevices().filter(d => ifacesOf(d.id).some(i => i.ip)), ips = simIps(), known = ips.some(x => x.i.ip === SIM.dst);
+      el.querySelector(".sim-ctl").innerHTML = `<b class="sim-title">✉ 패킷 시뮬레이션</b>
+        <label>출발 <select id="simSrc"><option value="">고르기</option>${srcs.map(d => `<option value="${esc(d.id)}"${d.id === SIM.src ? " selected" : ""}>${esc(d.name)}${devIp(d.id) ? " · " + esc(devIp(d.id)) : ""}</option>`).join("")}</select></label>
+        <label>도착 <select id="simDst"><option value="">고르기</option>${ips.map(x => `<option value="${esc(x.i.ip)}"${x.i.ip === SIM.dst ? " selected" : ""}>${esc(x.d.name)} · ${esc(x.i.ip)}</option>`).join("")}<option value="*"${SIM.dst && !known ? " selected" : ""}>IP 직접 입력…</option></select><input id="simDstIp" class="mono" placeholder="10.0.0.1" inputmode="decimal" value="${SIM.dst && !known ? esc(SIM.dst) : ""}"${SIM.dst && !known ? "" : " hidden"}></label>
+        <span class="sim-kind">ICMP ping</span>
+        <button type="button" class="btn sm primary" data-sim="send">▶ 보내기</button>
+        <button type="button" class="btn sm" data-sim="pause"${n ? "" : " disabled"}>${SIM.playing ? "⏸ 멈춤" : "▶ 이어서"}</button>
+        <button type="button" class="btn sm" data-sim="step"${n ? "" : " disabled"}>⏭ 한 단계</button>
+        <button type="button" class="btn sm" data-sim="reset"${n ? "" : " disabled"}>↺ 처음부터</button>
+        <label>속도 <select id="simSpeed">${[[0.5, "느리게"], [1, "보통"], [2, "빠르게"]].map(([v, l]) => `<option value="${v}"${SIM.speed === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+        <label class="toggle" title="CLI·Command Prompt에서 ping 하면 토폴로지에서도 보여줌"><input type="checkbox" id="simCli"${SIM.cli ? " checked" : ""}> CLI ping도 보기</label>
+        <span class="sim-status" id="simStatus">${status}</span>
+        <button type="button" class="btn ghost sm" data-sim="close" aria-label="시뮬레이션 닫기">✕</button>`;
+    } else { const st = $("#simStatus"); if (st) st.innerHTML = status; const pb = el.querySelector('[data-sim="pause"]'); if (pb) pb.textContent = SIM.playing ? "⏸ 멈춤" : "▶ 이어서"; }
+    const rows = SIM.steps.map((s, k) => `<tr data-simrow="${k}" class="${k === cur ? "now" : k < SIM.i ? "past" : ""}"><td>${k + 1}</td><td>${(k * 0.001).toFixed(3)}</td><td>${esc(simDev(s.h.out.deviceId)?.name || "")}</td><td>${esc(simDev(s.h.in.deviceId)?.name || "")}</td><td><span class="sim-tag ${SIM_T[s.type][1]}">${SIM_T[s.type][0]}</span></td><td>${esc(simNote(s, k, SIM.steps))}</td></tr>`).join("")
+      + (done && SIM.fail ? `<tr class="fail"><td>✗</td><td></td><td colspan="2">${esc(SIM.fail.at?.name || "")}</td><td><span class="sim-tag bad">멈춤</span></td><td>${esc(SIM.fail.why || "")}</td></tr>` : "")
+      + (done && SIM.ok && SIM.dst ? `<tr class="okrow"><td>✓</td><td></td><td colspan="2">${esc(simDev(SIM.src)?.name || "")}</td><td><span class="sim-tag rep">성공</span></td><td>${SIM.self ? "자기 자신의 주소입니다." : `${esc(SIM.dst)}에서 응답이 돌아왔습니다.`}</td></tr>` : "");
+    el.querySelector(".sim-ev").innerHTML = SIM.dst ? `<table><thead><tr><th>#</th><th>시간</th><th>지난 장비</th><th>지금 장비</th><th>종류</th><th>내용</th></tr></thead><tbody>${rows}</tbody></table>` : "";
+    el.querySelector("tr.now")?.scrollIntoView({ block: "nearest" });
+  }
+  $("#simPanel").addEventListener("click", e => {
+    const r = e.target.closest("[data-simrow]");
+    if (r) { SIM.playing = false; SIM.i = +r.dataset.simrow + 1; SIM.t = 0; renderSimPanel(); simDraw(); return; }
+    const b = e.target.closest("[data-sim]"); if (!b) return;
+    const a = b.dataset.sim;
+    if (a === "send") { const dst = $("#simDst").value === "*" ? $("#simDstIp").value.trim() : $("#simDst").value; if (!$("#simSrc").value || !ipRe.test(dst)) { toast("출발 장비와 도착 IP를 고르세요."); return; } simSend($("#simSrc").value, dst); }
+    else if (a === "pause") { if (SIM.playing) { SIM.playing = false; renderSimPanel(); } else simPlay(); }
+    else if (a === "step") { SIM.playing = false; if (SIM.i >= SIM.steps.length) { SIM.i = 0; } simPlay(SIM.i + 1); }
+    else if (a === "reset") { SIM.playing = false; SIM.i = 0; SIM.t = 0; renderSimPanel(); simDraw(); }
+    else if (a === "close") { SIM.open = false; SIM.playing = false; SIM.steps = []; SIM.ok = null; SIM.fail = null; renderSimPanel(); simDraw(); if (state.tool?.kind === "pdu") setTool(null); }
+  });
+  $("#simPanel").addEventListener("change", e => {
+    if (e.target.id === "simDst") { const ip = $("#simDstIp"); ip.hidden = e.target.value !== "*"; if (!ip.hidden) ip.focus(); }
+    if (e.target.id === "simSrc") SIM.src = e.target.value;
+    if (e.target.id === "simSpeed") { SIM.speed = +e.target.value; try { localStorage.setItem("portbook.simSpeed", SIM.speed); } catch (err) {} }
+    if (e.target.id === "simCli") { SIM.cli = e.target.checked; try { localStorage.setItem("portbook.simCli", SIM.cli ? "1" : "0"); } catch (err) {} }
+  });
+  $("#simPanel").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "simDstIp") { e.preventDefault(); $("#simPanel [data-sim=send]").click(); } });
+  function pduClick(devId) {
+    const t = state.tool;
+    if (t.step === 1) { if (!devIp(devId)) { toast(`${devName(devId)}에 IP가 없습니다.`); return; } setTool({ kind: "pdu", step: 2, src: devId }); SIM.open = true; SIM.src = devId; SIM.dst = ""; SIM.steps = []; SIM.ok = null; SIM.fail = null; renderSimPanel(); return; }
+    if (devId === t.src) return;
+    const ip = devIp(devId); if (!ip) { toast(`${devName(devId)}에 IP가 없습니다.`); return; }
+    setTool({ kind: "pdu", step: 1 }); simSend(t.src, ip);
+  }
   // IOS ping (privileged / user mode)
   async function iosPing(d, dst) {
     if (!ipRe.test(dst || "")) { cliOut("% Unrecognized host or address, or protocol not running.", "cli-err"); return; }
-    const r = pingResult(d, dst);
+    const r = pingResult(d, dst); simFromCli(d.id, dst);
     cliOut(""); cliOut("Type escape sequence to abort."); cliOut(`Sending 5, 100-byte ICMP Echos to ${dst}, timeout is 2 seconds:`);
     const key = d.id + ">" + dst, arp = r.ok && r.hops.length > 0 && !pinged.has(key); let marks = "";
     for (let k = 0; k < 5; k++) marks += r.ok && !(arp && k === 0) ? "!" : r.fail?.why === "noroute" ? "U" : ".";
